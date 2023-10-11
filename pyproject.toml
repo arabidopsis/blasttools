@@ -15,6 +15,9 @@ biopython = "^1.81"
 blasttools = "blasttools.cli:blast"
 
 
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.6.0"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

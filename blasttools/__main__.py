@@ -1,3 +1,3 @@
 from .cli import blast
 
-blast()  # pylint: disable
+blast()  # pylint: disable=no-value-for-parameter

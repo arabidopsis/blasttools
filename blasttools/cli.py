@@ -23,7 +23,8 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 
 
 @click.group()
-@click.option("--release", default=RELEASE, show_default=True, help="release number")
+@click.option("-r", "--release", default=RELEASE, show_default=True, help="release number")
+@click.version_option()
 @click.pass_context
 def blast(ctx: click.Context, release: int):
     ctx.obj = Config(release=release)
@@ -38,7 +39,7 @@ def build_cmd(cfg: Config, species: Sequence[str]):
 
 
 @blast.command(name="blast")
-@click.option("--best", default=2, help="top best evalues")
+@click.option("--best", default=2, help="best (lowest) evalues [=0 take all]")
 @click.option("--with_seq", is_flag=True, help="added sequence data to output")
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("species", nargs=-1)
@@ -50,7 +51,7 @@ def blast_cmd(
     df = blastall(query, species, release=cfg.release, best=best, with_seq=with_seq)
     out = query + ".csv"
     click.secho(f"writing {out}", fg="green")
-    df.to_csv(out)
+    df.to_csv(out, index=False)
 
 
 @blast.command(name="fetch-fastas")
@@ -83,7 +84,7 @@ def species_cmd(cfg: Config) -> None:
 @blast.command(name="merge-fasta")
 @click.argument("fasta1", type=click.Path(exists=True, dir_okay=False))
 @click.argument("fasta2", type=click.Path(exists=True, dir_okay=False))
-@click.argument("out", type=click.Path(exists=False, dir_okay=False))
-def merge_fasta_cmd(fasta1: str, fasta2: str, out: str) -> None:
+@click.argument("outfasta", type=click.Path(exists=False, dir_okay=False))
+def merge_fasta_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
     """merge 2 fasta files"""
-    merge_fasta(fasta1, fasta2, out)
+    merge_fasta(fasta1, fasta2, outfasta)
