@@ -1,0 +1,11 @@
+[MESSAGES CONTROL]
+disable=missing-docstring,
+        missing-class-docstring,
+        import-outside-toplevel,
+        invalid-name,
+        too-few-public-methods
+
+
+
+[FORMAT]
+max-line-length=115

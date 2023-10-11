@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "blasttools"
+version = "0.1.0"
+description = ""
+authors = ["arabidopsis <ian.castleden@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11,<3.13"
+pandas = "^2.1.1"
+click = "^8.1.7"
+biopython = "^1.81"
+
+[tool.poetry.scripts]
+blasttools = "blasttools.cli:blast"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
