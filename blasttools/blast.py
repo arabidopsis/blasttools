@@ -4,34 +4,28 @@ from __future__ import annotations
 
 from typing import Iterator, Sequence
 
-from functools import cache
-import gzip
-import os
 import ftplib
 import glob
 import subprocess
-from shutil import which
+
 from pathlib import Path
-from uuid import uuid4
 
 import click
 import pandas as pd  # type: ignore
 
-from Bio import SeqIO  # type: ignore
-from Bio.SeqRecord import SeqRecord  # type: ignore
-from Bio.Seq import Seq  # type: ignore
+from .blastapi import (
+    safe_which,
+    fasta_to_df,
+    doblast6,
+    fetch_seq as fetch_seq_raw,
+    find_best,
+)
+
+from .blastapi import BlastDb
 
 PEP_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/{plant}/pep"
 FTPURL = "ftp.ebi.ac.uk"
 ENSEMBL = f"ftp://{FTPURL}/" + PEP_DIR + "/{file}"
-
-
-@cache
-def safe_which(cmd: str) -> str:
-    r = which(cmd)
-    if r is None:
-        raise click.Abort(f"can't find application: {cmd}")
-    return r
 
 
 def blast_dir(release: int) -> Path:
@@ -68,144 +62,20 @@ def fetch_fasta(
     return r
 
 
-def mkblast(plant: str, fastafile: str, release: int) -> subprocess.Popen[bytes]:
-    gunzip = safe_which("gunzip")
-    makeblastdb = safe_which("makeblastdb")
-    # -parse_seqids so that we can get sequences out from ids with blastdbcmd
-    bd = blast_dir(release)
-    with subprocess.Popen(
-        [gunzip, "--stdout", fastafile], stdout=subprocess.PIPE, cwd=str(bd)
-    ) as p1:
-        with subprocess.Popen(
-            [
-                makeblastdb,
-                "-in",
-                "-",
-                "-out",
-                plant,
-                "-input_type=fasta",
-                "-dbtype",
-                "prot",
-                "-title",
-                plant,
-                "-parse_seqids",
-                "-blastdb_version",
-                "5",
-            ],
-            stdin=p1.stdout,
-            cwd=str(bd),
-        ) as p2:
-            if p1.stdout:
-                p1.stdout.close()
-            p2.wait()
-            p1.wait()
-            return p2
-
-
-def read_fasta(blastdir: Path, gzfasta: str) -> Iterator[SeqRecord]:
-    yield from read_fastax(str(blastdir / gzfasta))
-
-
-def read_fastax(path: str) -> Iterator[SeqRecord]:
-    if path.endswith(".gz"):
-        with gzip.open(path, "rt") as fp:
-            yield from SeqIO.parse(fp, "fasta")
-    else:
-        with open(path, "rt", encoding="utf-8") as fp:
-            yield from SeqIO.parse(fp, "fasta")
-
-
-def fasta_to_df(path: str) -> pd.DataFrame:
-    return pd.DataFrame(
-        [dict(id=rec.id, seq=str(rec.seq).upper()) for rec in read_fastax(path)]
-    )
-
-
-# See `blastp -help | less`
-# or http://scikit-bio.org/docs/0.5.4/generated/skbio.io.format.blast6.html
-# https://www.ncbi.nlm.nih.gov/books/NBK279684/ seems out of date
-# default header for -outfmt 6
-HEADER = (
-    "qaccver",
-    "saccver",
-    "pident",
-    "length",
-    "mismatch",
-    "gapopen",
-    "qstart",
-    "qend",
-    "sstart",
-    "send",
-    "evalue",
-    "bitscore",
-)
-
-QUERY = HEADER[0]
-EVALUE = HEADER[-2]
-
-RENAMES = {"length": "alignment length"}
+def mkblast(plant: str, fastafile: str, release: int) -> bool:
+    db = blast_dir(release) / plant
+    bdb = BlastDb(str(db))
+    return bdb.run(fastafile)
 
 
 def doblast(
     queryfasta: str,
     plant: str,
     release: int,
-    header: Sequence[str] = HEADER,
 ) -> pd.DataFrame:
     blastdir = blast_dir(release)
 
-    return doblastx(queryfasta, str(blastdir / plant), header=header)
-
-
-def doblastx(
-    queryfasta: str,
-    blastdb: str,
-    header: Sequence[str] = HEADER,
-) -> pd.DataFrame:
-    blastp = safe_which("blastp")
-    outfmt = f'6 {" ".join(header)}'
-    out = f"{uuid4()}.tsv"
-    try:
-        r = subprocess.run(
-            [
-                blastp,
-                "-outfmt",
-                outfmt,
-                "-query",
-                queryfasta,
-                "-db",
-                blastdb,
-                "-out",
-                out,
-            ],
-            check=False,
-        )
-        if r.returncode:
-            raise RuntimeError(f"can't run blastp using {queryfasta}")
-        return out6_to_df(out, header)
-    finally:
-        remove_files([out])
-
-
-def out6_to_df(tsvfile: str, header=HEADER) -> pd.DataFrame:
-    return pd.read_csv(tsvfile, header=0, sep="\t", names=header)
-
-
-def find_best(
-    blast_df: pd.DataFrame,
-    query_df: pd.DataFrame,
-    nevalues: int = 2,
-    evalue: str = EVALUE,
-) -> pd.DataFrame:
-    if nevalues > 0:
-        r = blast_df.groupby(QUERY)[evalue].nsmallest(nevalues).reset_index(level=0)
-        myrdf = blast_df.loc[r.index].sort_values(
-            [QUERY, evalue], ascending=[True, True]
-        )
-    else:
-        myrdf = blast_df.sort_values([QUERY, evalue], ascending=[True, True])
-    myrdf = pd.merge(myrdf, query_df, left_on=QUERY, right_on="id")
-    return myrdf
+    return doblast6(queryfasta, str(blastdir / plant))
 
 
 def has_blast_db(blastdir: Path, plant: str) -> bool:
@@ -216,41 +86,14 @@ def has_fasta(blastdir: Path, filename: str) -> bool:
     return (blastdir / filename).exists()
 
 
-def remove_files(files: list[str]) -> None:
-    for f in files:
-        try:
-            os.remove(f)
-        except OSError:
-            pass
-
-
-def fetch_seq(seqids: Sequence[str], plant: str, release: int) -> Iterator[SeqRecord]:
-    blastdbcmd = safe_which("blastdbcmd")
-    u = uuid4()
-    seqfile = f"{u}.seq"
-    out = f"{u}.fasta"
-    blastdir = blast_dir(release)
-    with open(seqfile, "wt", encoding="utf-8") as fp:
-        for seq in seqids:
-            print(seq, file=fp)
-    try:
-        r = subprocess.run(
-            [blastdbcmd, "-db", blastdir / plant, "-out", out, "-entry_batch", seqfile],
-            check=False,
-        )
-        if r.returncode:
-            raise RuntimeError("can't fetch sequences")
-        with open(out, "rt", encoding="utf-8") as fp:
-            yield from SeqIO.parse(fp, "fasta")
-    finally:
-        remove_files([seqfile, out])
-
-
 def fetch_seq_df(seqids: Sequence[str], plant: str, release: int) -> pd.DataFrame:
+    blastdir = blast_dir(release)
+    blastdb = str(blastdir / plant)
+
     return pd.DataFrame(
         [
             {"saccver": rec.id, "subject_seq": str(rec.seq)}
-            for rec in fetch_seq(seqids, plant, release)
+            for rec in fetch_seq_raw(seqids, blastdb)
         ]
     )
 
@@ -302,53 +145,9 @@ def build(species: Sequence[str], release: int):
         if has_blast_db(blastdir, plant):
             continue
         print("creating blast db for", plant)
-        r2 = mkblast(plant, filename, release)
-        if r2.returncode:
+        ok = mkblast(plant, filename, release)
+        if not ok:
             print(f"failed to create blast db for {plant}")
-
-
-def merge_fasta(fasta1: str, fasta2: str, out: str) -> None:
-    df1 = fasta_to_df(fasta1)
-    prefix1 = os.path.commonprefix(df1.id.to_list())
-    df2 = fasta_to_df(fasta2)
-    prefix2 = os.path.commonprefix(df2.id.to_list())
-    prefix = os.path.commonprefix([prefix1, prefix2])
-    df = pd.merge(
-        df1, df2, how="outer", left_on="seq", right_on="seq", suffixes=("_1", "_2")
-    )
-    df = df.fillna("x")
-
-    n = len(prefix)
-
-    def nameit(s):
-        i, j = s.id_1, s.id_2
-        if i == "x":
-            return f"{prefix}-{i}-{j[n:]}"
-
-        if j == "x":
-            return f"{prefix}-{i[n:]}-{j}"
-
-        return f"{prefix}-{i[n:]}-{j[n:]}"
-
-    df["id"] = df[["id_1", "id_2"]].apply(nameit, axis=1)
-
-    write_fasta(df, out)
-
-
-def write_fasta(df: pd.DataFrame, filename: str) -> None:
-    r = df[["id", "seq"]]
-    if filename.endswith(".gz"):
-        with gzip.open(filename, "wt", encoding="utf-8") as fp:
-            for row in r.itertuples():
-                rec = SeqRecord(id=row.id, seq=Seq(row.seq), description="")
-                # print(rec.seq)
-                SeqIO.write(rec, fp, format="fasta")
-    else:
-        with open(filename, "wt", encoding="utf-8") as fp:
-            for row in r.itertuples():
-                rec = SeqRecord(id=row.id, seq=Seq(row.seq), description="")
-                # print(rec.seq)
-                SeqIO.write(rec, fp, format="fasta")
 
 
 def blastall(
@@ -365,9 +164,7 @@ def blastall(
             saccver = list(rdf["saccver"])
             sdf = fetch_seq_df(saccver, plant, release)
             rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
-        renames = {k: v for k, v in RENAMES.items() if k in rdf.columns}
-        if renames:
-            rdf = rdf.rename(columns=renames)
+
         myrdf = find_best(rdf, df, nevalues=best)
         myrdf["species"] = plant
         res.append(myrdf)

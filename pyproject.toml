@@ -12,7 +12,7 @@ click = "^8.1.7"
 biopython = "^1.81"
 
 [tool.poetry.scripts]
-blasttools = "blasttools.cli:blast"
+blasttools = "blasttools.__main__:blast"
 
 
 [tool.poetry.group.dev.dependencies]

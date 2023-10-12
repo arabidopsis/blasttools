@@ -3,41 +3,40 @@ from __future__ import annotations
 import subprocess
 from typing import Iterator
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from uuid import uuid4
+import pandas as pd
 from Bio.Blast.NCBIXML import parse
 from Bio.Blast.Record import Blast, Alignment, HSP
-from .blast import safe_which, blast_dir, remove_files
+from .blastapi import safe_which, remove_files
 
 
-def doblastxml(queryfasta: str, plant: str, release: int) -> Iterator[Blast]:
-    blastdir = blast_dir(release)
-    outfmt = "5"
-    out = f"{uuid4()}.xml"
-    blastp = safe_which("blastp")
-    try:
-        r = subprocess.run(
-            [
-                blastp,
-                "-outfmt",
-                outfmt,
-                "-query",
-                queryfasta,
-                "-db",
-                blastdir / plant,
-                "-out",
-                out,
-            ],
-            check=False,
-        )
-        if r.returncode:
-            raise RuntimeError("can't blast")
-        with open(out, "rt", encoding="utf-8") as fp:
-            yield from parse(fp)
-    finally:
-        remove_files([out])
-
-
+class BlastXML:
+    def run(self, queryfasta: str, blastdb: str) -> Iterator[Blast]:
+        outfmt = "5"
+        out = f"{uuid4()}.xml"
+        blastp = safe_which("blastp")
+        try:
+            r = subprocess.run(
+                [
+                    blastp,
+                    "-outfmt",
+                    outfmt,
+                    "-query",
+                    queryfasta,
+                    "-db",
+                    blastdb,
+                    "-out",
+                    out,
+                ],
+                check=False,
+            )
+            if r.returncode:
+                raise RuntimeError("can't blast")
+            with open(out, "rt", encoding="utf-8") as fp:
+                yield from parse(fp)
+        finally:
+            remove_files([out])
 
 
 @dataclass
@@ -48,9 +47,9 @@ class Hit:
     accession_length: int  # accession length
     hsp_align_length: int
     hsp_bits: float
+    hsp_score: float
     hsp_expect: float
     hsp_identities: int
-    hsp_score: float
 
     hsp_match: str
     hsp_query: str
@@ -74,22 +73,22 @@ def unwind(xml: Iterator[Blast]) -> Iterator[tuple[Blast, Alignment, HSP]]:
 def hits(xml: Iterator[Blast]) -> Iterator[Hit]:
     for b, a, h in unwind(xml):
         yield Hit(
-            query=b.query,
+            query=b.query,  # qaccver
             query_length=b.query_length,
-            accession=a.accession,
+            accession=a.accession,  # saccver
             accession_length=a.length,
-            hsp_align_length=h.align_length,
-            hsp_bits=h.bits,
-            hsp_expect=h.expect,
+            hsp_align_length=h.align_length,  # alignment length
+            hsp_bits=h.bits,  # bitscore
+            hsp_score=h.score,  # bitscore?
+            hsp_expect=h.expect,  # evalue
             hsp_identities=h.identities,
-            hsp_score=h.score,
             hsp_match=h.match,
             hsp_query=h.query,
-            hsp_query_start=h.query_start,
-            hsp_query_end=h.query_end,
+            hsp_query_start=h.query_start,  # qstart
+            hsp_query_end=h.query_end,  # qend
             hsp_sbjct=h.sbjct,
-            hsp_sbjct_start=h.sbjct_start,
-            hsp_sbjct_end=h.sbjct_end,
+            hsp_sbjct_start=h.sbjct_start,  # sstart
+            hsp_sbjct_end=h.sbjct_end,  # send
         )
 
 
@@ -141,3 +140,8 @@ def hsp_match(hsp: HSP, width: int = 50, right: int = 0) -> str:
             f"Sbjct:{str(hsp.sbjct_start).rjust(8)} {hsp.sbjct[:left]}...{hsp.sbjct[-right:]} {hsp.sbjct_end}"
         )
     return "\n".join(lines)
+
+
+def blastxml_to_df(queryfasta: str, blastdb: str) -> pd.DataFrame:
+    bs = BlastXML()
+    return pd.DataFrame([asdict(hit) for hit in hits(bs.run(queryfasta, blastdb))])
