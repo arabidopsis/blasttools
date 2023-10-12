@@ -1,2 +1,3 @@
 # blasttools
-tools for runing blasts
+
+tools for running blasts. i.e. turning blast queries into pandas dataframes.

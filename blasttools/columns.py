@@ -1,4 +1,6 @@
-VAILD = {
+# valid columns for -outfmt 6
+
+VALID = {
     "qseqid": "Query Seq-id",
     "qgi": "Query GI",
     "qacc": "Query accesion",

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Iterator, Sequence
-
+from dataclasses import dataclass
 import ftplib
 import glob
 import subprocess
@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 import click
-import pandas as pd  # type: ignore
+import pandas as pd
 
 from .blastapi import (
     safe_which,
@@ -32,17 +32,23 @@ def blast_dir(release: int) -> Path:
     return Path(f"blast-{release}")
 
 
-def find_fasta_names(plants: Sequence[str], release: int) -> Iterator[str | None]:
+@dataclass
+class FileInfo:
+    species: str
+    fasta: str | None
+
+
+def find_fasta_names(plants: Sequence[str], release: int) -> Iterator[FileInfo]:
     with ftplib.FTP(FTPURL) as ftp:
         ftp.login()
         for plant in plants:
             dname = PEP_DIR.format(release=release, plant=plant)
             for n in ftp.nlst(dname):
                 if n.endswith(".pep.all.fa.gz"):
-                    yield n[len(dname) + 1 :]
+                    yield FileInfo(plant, n[len(dname) + 1 :])
                     break
             else:
-                yield None
+                yield FileInfo(plant, None)
 
 
 def fetch_fasta(
@@ -69,13 +75,11 @@ def mkblast(plant: str, fastafile: str, release: int) -> bool:
 
 
 def doblast(
-    queryfasta: str,
-    plant: str,
-    release: int,
+    queryfasta: str, plant: str, release: int, header: Sequence[str] | None = None
 ) -> pd.DataFrame:
     blastdir = blast_dir(release)
 
-    return doblast6(queryfasta, str(blastdir / plant))
+    return doblast6(queryfasta, str(blastdir / plant), header=header)
 
 
 def has_blast_db(blastdir: Path, plant: str) -> bool:
@@ -110,55 +114,64 @@ def fetch_fastas(plants: Sequence[str], release: int) -> None:
 
     bd.mkdir(parents=True, exist_ok=True)
 
-    for plant, filename in zip(plants, find_fasta_names(plants, release)):
-        if filename is None:
-            print(f"can't find fasta for {plant}!")
+    for info in find_fasta_names(plants, release):
+        if info.fasta is None:
+            print(f"can't find fasta for {info.species}!")
             continue
 
-        if (bd / filename).exists():
+        if (bd / info.fasta).exists():
             continue
-        print("fetching", filename)
-        r = fetch_fasta(plant, filename, release=release)
+        print("fetching", info.fasta)
+        r = fetch_fasta(info.species, info.fasta, release=release)
         if r.returncode:
             print(r)
 
 
-def build(species: Sequence[str], release: int):
+def build(species: Sequence[str], release: int) -> None:
     blastdir = blast_dir(release)
     blastdir.mkdir(parents=True, exist_ok=True)
 
-    plants = [
-        (p, f)
-        for p, f in zip(species, find_fasta_names(species, release))
-        if f is not None
-    ]
+    plants = list(find_fasta_names(species, release=release))
 
-    for plant, filename in plants:
-        if has_fasta(blastdir, filename):
+    for info in plants:
+        if info.fasta is None:
             continue
-        print(f"fetching {filename} for release: {release}")
-        r = fetch_fasta(plant, filename, release)
+        if has_fasta(blastdir, info.fasta):
+            continue
+        print(f"fetching {info.fasta} for release: {release}")
+        r = fetch_fasta(info.species, info.fasta, release)
         if r.returncode:
-            click.secho(f"failed to fetch {filename}", fg="red", err=True)
+            click.secho(f"failed to fetch {info.fasta}", fg="red", err=True)
 
-    for plant, filename in plants:
-        if has_blast_db(blastdir, plant):
+    for info in plants:
+        if info.fasta is None:
             continue
-        print("creating blast db for", plant)
-        ok = mkblast(plant, filename, release)
+        if has_blast_db(blastdir, info.species):
+            continue
+        print("creating blast db for", info.species)
+        ok = mkblast(info.species, info.fasta, release)
         if not ok:
-            print(f"failed to create blast db for {plant}")
+            print(f"failed to create blast db for {info.species}")
 
 
 def blastall(
-    query: str, species: Sequence[str], release: int, best: int, with_seq: bool
+    query: str,
+    species: Sequence[str],
+    release: int,
+    best: int,
+    with_seq: bool,
+    header: Sequence[str] | None = None,
 ) -> pd.DataFrame:
     df = fasta_to_df(query)
+    if not df["id"].is_unique:
+        raise click.ClickException(
+            f'sequences IDs are not unique for query file "{query}"'
+        )
     res = []
 
     build(species, release)
     for plant in species:
-        rdf = doblast(query, plant, release=release)
+        rdf = doblast(query, plant, release=release, header=header)
 
         if with_seq and "saccver" in rdf.columns:
             saccver = list(rdf["saccver"])

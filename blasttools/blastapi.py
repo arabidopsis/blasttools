@@ -12,7 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import click
-import pandas as pd  # type: ignore
+import pandas as pd
 
 from Bio import SeqIO  # type: ignore
 from Bio.SeqRecord import SeqRecord  # type: ignore
@@ -23,7 +23,7 @@ from Bio.Seq import Seq  # type: ignore
 def safe_which(cmd: str) -> str:
     r = which(cmd)
     if r is None:
-        raise click.Abort(f"can't find application: {cmd}")
+        raise click.ClickException(f'can\'t find application: "{cmd}"')
     return r
 
 
@@ -37,10 +37,10 @@ def read_fasta(path: str) -> Iterator[SeqRecord]:
 
 
 def fasta_to_df(path: str, with_description: bool = False) -> pd.DataFrame:
-    def todict1(rec):
+    def todict1(rec: SeqRecord) -> dict[str, str]:
         return dict(id=rec.id, seq=str(rec.seq).upper())
 
-    def todict2(rec):
+    def todict2(rec: SeqRecord) -> dict[str, str]:
         return dict(id=rec.id, seq=str(rec.seq).upper(), description=rec.description)
 
     todict = todict2 if with_description else todict1
@@ -116,8 +116,27 @@ QUERY = HEADER[0]
 EVALUE = HEADER[-2]
 
 
+def mkheader(header: str) -> Sequence[str]:
+    from .columns import VALID
+
+    add = header.startswith("+")
+    sub = header.startswith("-")
+    h = header[1:] if add or sub else header
+    hl = h.strip().split()
+    if sub:
+        hl = [h for h in HEADER if h not in hl]
+    elif add:
+        hl = list(HEADER) + [h for h in hl if h not in HEADER]
+    unknown = set(hl) - set(VALID)
+    if unknown:
+        raise click.ClickException(f"unknown headers \"{' '.join(unknown)}\"")
+    return tuple(hl)
+
+
 class Blast6:
-    def __init__(self, header: Sequence[str] = HEADER):
+    def __init__(self, header: Sequence[str] | None = None):
+        if header is None:
+            header = HEADER
         self.header = header
 
     def run(
@@ -144,37 +163,43 @@ class Blast6:
                 check=False,
             )
             if r.returncode:
-                raise RuntimeError(f"can't run blastp using {queryfasta}")
+                raise click.ClickException(f"can't run blastp using {queryfasta}")
             return out6_to_df(out, self.header)
         finally:
             remove_files([out])
 
 
 def doblast6(
-    queryfasta: str, blastdb: str, header: Sequence[str] = HEADER
+    queryfasta: str, blastdb: str, header: Sequence[str] | None = None
 ) -> pd.DataFrame:
     b6 = Blast6(header)
     return b6.run(queryfasta, blastdb)
 
 
-def out6_to_df(tsvfile: str, header=HEADER) -> pd.DataFrame:
-    return pd.read_csv(tsvfile, header=0, sep="\t", names=header)
+def out6_to_df(tsvfile: str, header: Sequence[str] = HEADER) -> pd.DataFrame:
+    return pd.read_csv(tsvfile, header=0, sep="\t", names=list(header))
 
 
 def write_fasta(df: pd.DataFrame, filename: str) -> None:
-    r = df[["id", "seq"]]
+    if "description" in df.columns:
+        r = df[["id", "seq", "description"]]
+        wd = True
+    else:
+        r = df[["id", "seq"]]
+        wd = False
+
+    def toseq(row):
+        d = row.description if wd else ""
+        return SeqRecord(id=row.id, seq=Seq(row.seq), description=d)
+
     if filename.endswith(".gz"):
         with gzip.open(filename, "wt", encoding="utf-8") as fp:
             for row in r.itertuples():
-                rec = SeqRecord(id=row.id, seq=Seq(row.seq), description="")
-                # print(rec.seq)
-                SeqIO.write(rec, fp, format="fasta")
+                SeqIO.write(toseq(row), fp, format="fasta")
     else:
         with open(filename, "wt", encoding="utf-8") as fp:
             for row in r.itertuples():
-                rec = SeqRecord(id=row.id, seq=Seq(row.seq), description="")
-                # print(rec.seq)
-                SeqIO.write(rec, fp, format="fasta")
+                SeqIO.write(toseq(row), fp, format="fasta")
 
 
 def remove_files(files: list[str]) -> None:
@@ -199,38 +224,53 @@ def fetch_seq(seqids: Sequence[str], blastdb: str) -> Iterator[SeqRecord]:
             check=False,
         )
         if r.returncode:
-            raise RuntimeError("can't fetch sequences")
+            raise click.ClickException("can't fetch sequences")
         with open(out, "rt", encoding="utf-8") as fp:
             yield from SeqIO.parse(fp, "fasta")
     finally:
         remove_files([seqfile, out])
 
 
-def merge_fasta(fasta1: str, fasta2: str, out: str) -> None:
-    df1 = fasta_to_df(fasta1)
+def merge_fasta(
+    fasta1: str, fasta2: str, out: str, with_description: bool = True
+) -> None:
+    df1 = fasta_to_df(fasta1, with_description=with_description)
+    df2 = fasta_to_df(fasta2, with_description=with_description)
     prefix1 = os.path.commonprefix(df1.id.to_list())
-    df2 = fasta_to_df(fasta2)
     prefix2 = os.path.commonprefix(df2.id.to_list())
     prefix = os.path.commonprefix([prefix1, prefix2])
+
+    FILLNA = "x"
     df = pd.merge(
         df1, df2, how="outer", left_on="seq", right_on="seq", suffixes=("_1", "_2")
     )
-    df = df.fillna("x")
+    df = df.fillna(FILLNA)
 
     n = len(prefix)
 
     def nameit(s):
         i, j = s.id_1, s.id_2
-        if i == "x":
+        if i == FILLNA:
             return f"{prefix}-{i}-{j[n:]}"
 
-        if j == "x":
+        if j == FILLNA:
             return f"{prefix}-{i[n:]}-{j}"
 
         return f"{prefix}-{i[n:]}-{j[n:]}"
 
     df["id"] = df[["id_1", "id_2"]].apply(nameit, axis=1)
 
+    def desc(s):
+        i, j = s.description_1, s.description_2
+        if i == j:
+            return i
+        if i == FILLNA:
+            return j
+        if j == FILLNA:
+            return i
+        return f"{i} | {j}"
+
+    df["description"] = df[["description_1", "description_2"]].apply(desc, axis=1)
     write_fasta(df, out)
 
 
@@ -238,16 +278,22 @@ def find_best(
     blast_df: pd.DataFrame,
     query_df: pd.DataFrame,
     nevalues: int = 2,
-    evalue: str = EVALUE,
+    evalue_col: str = EVALUE,
+    query_col: str = QUERY,
 ) -> pd.DataFrame:
     if nevalues > 0:
-        r = blast_df.groupby(QUERY)[evalue].nsmallest(nevalues).reset_index(level=0)
+        r = (
+            blast_df.groupby(query_col)[evalue_col]
+            .nsmallest(nevalues)
+            .reset_index(level=0)
+        )
         myrdf = blast_df.loc[r.index].sort_values(
-            [QUERY, evalue], ascending=[True, True]
+            [query_col, evalue_col], ascending=[True, True]
         )
     else:
-        myrdf = blast_df.sort_values([QUERY, evalue], ascending=[True, True])
-    myrdf = pd.merge(myrdf, query_df, left_on=QUERY, right_on="id")
+        myrdf = blast_df.sort_values([query_col, evalue_col], ascending=[True, True])
+    myrdf = pd.merge(myrdf, query_df, left_on=query_col, right_on="id")
+    myrdf.drop(columns=["id"], inplace=True)
     return myrdf
 
 
@@ -321,6 +367,10 @@ def blastall(
     query: str, blastdbs: Sequence[str], best: int, with_seq: bool
 ) -> pd.DataFrame:
     df = fasta_to_df(query)
+    if not df["id"].is_unique:
+        raise click.ClickException(
+            f'sequences IDs are not unique for query file "{query}"'
+        )
     res = []
 
     b6 = Blast6()
@@ -375,7 +425,7 @@ def buildall(
             b = BlastDb(db)
             ok = b.run(fa)
             if not ok:
-                raise RuntimeError(f"can't build database with {fastafile}")
+                raise click.ClickException(f"can't build database with {fastafile}")
     finally:
         if out:
             remove_files([out])

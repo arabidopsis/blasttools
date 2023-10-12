@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
 import subprocess
 from typing import Iterator
+from collections.abc import Sequence
 
 from dataclasses import dataclass, asdict
 from uuid import uuid4
 import pandas as pd
-from Bio.Blast.NCBIXML import parse
-from Bio.Blast.Record import Blast, Alignment, HSP
-from .blastapi import safe_which, remove_files
+import click
+from Bio.Blast.NCBIXML import parse  # type: ignore
+from Bio.Blast.Record import Blast, Alignment, HSP  # type: ignore
+from .blastapi import safe_which, remove_files, fasta_to_df, find_best, fetch_seq_df
 
 
 class BlastXML:
-    def run(self, queryfasta: str, blastdb: str) -> Iterator[Blast]:
+    def runner(self, queryfasta: str, blastdb: str) -> Iterator[Blast]:
         outfmt = "5"
         out = f"{uuid4()}.xml"
         blastp = safe_which("blastp")
@@ -32,16 +35,29 @@ class BlastXML:
                 check=False,
             )
             if r.returncode:
-                raise RuntimeError("can't blast")
+                raise click.ClickException("can't blast")
             with open(out, "rt", encoding="utf-8") as fp:
                 yield from parse(fp)
         finally:
             remove_files([out])
 
+    def run(self, queryfasta: str, blastdb: str) -> pd.DataFrame:
+        return pd.DataFrame(
+            [asdict(hit) for hit in hits(self.runner(queryfasta, blastdb))]
+        )
+
+
+def out5_to_df(xmlfile: str) -> pd.DataFrame:
+    def run() -> Iterator[Blast]:
+        with open(xmlfile, "rt", encoding="utf-8") as fp:
+            yield from parse(fp)
+
+    return pd.DataFrame([asdict(hit) for hit in hits(run())])
+
 
 @dataclass
 class Hit:
-    query: str
+    query: str  # full string from fasta description line
     query_length: int
     accession: str
     accession_length: int  # accession length
@@ -70,10 +86,13 @@ def unwind(xml: Iterator[Blast]) -> Iterator[tuple[Blast, Alignment, HSP]]:
                 yield b, a, h
 
 
-def hits(xml: Iterator[Blast]) -> Iterator[Hit]:
+def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
     for b, a, h in unwind(xml):
+        # b.query is the full line in the query fasta
+        # actually <query-def>
+        query = b.query.split(None, 1)[0] if not full else b.query
         yield Hit(
-            query=b.query,  # qaccver
+            query=query,
             query_length=b.query_length,
             accession=a.accession,  # saccver
             accession_length=a.length,
@@ -144,4 +163,37 @@ def hsp_match(hsp: HSP, width: int = 50, right: int = 0) -> str:
 
 def blastxml_to_df(queryfasta: str, blastdb: str) -> pd.DataFrame:
     bs = BlastXML()
-    return pd.DataFrame([asdict(hit) for hit in hits(bs.run(queryfasta, blastdb))])
+    return pd.DataFrame([asdict(hit) for hit in hits(bs.runner(queryfasta, blastdb))])
+
+
+def blastall(
+    query: str, blastdbs: Sequence[str], best: int, with_seq: bool
+) -> pd.DataFrame:
+    df = fasta_to_df(query)
+    if not df["id"].is_unique:
+        raise click.ClickException(
+            f'sequences IDs are not unique for query file "{query}"'
+        )
+    res = []
+
+    b5 = BlastXML()
+    for blastdb in blastdbs:
+        rdf = b5.run(query, blastdb)
+
+        print(rdf.columns, df.columns)
+
+        if with_seq and "accession" in rdf.columns:
+            saccver = list(rdf["accession"])
+            sdf = fetch_seq_df(saccver, blastdb)
+            sdf.rename(columns={"saccver": "accession"}, inplace=True)
+            rdf = pd.merge(rdf, sdf, left_on="accession", right_on="accession")
+
+        myrdf = find_best(
+            rdf, df, nevalues=best, evalue_col="hsp_expect", query_col="query"
+        )
+        print(len(myrdf))
+        myrdf["blastdb"] = Path(blastdb).name
+        res.append(myrdf)
+    ddf = pd.concat(res, axis=0)
+
+    return ddf
