@@ -22,13 +22,18 @@ def merge_fasta_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
 
 @blast.command(name="build")
 @click.option(
-    "-b", "--build", "builddir", type=click.Path(file_okay=False, dir_okay=True)
+    "-b",
+    "--build",
+    "builddir",
+    type=click.Path(file_okay=False, dir_okay=True),
+    help="build all databases in this directory",
 )
+@click.option("-m", "--merge", help="merge all fastafiles into one")
 @click.argument("fastas", nargs=-1)
-def build_cmd(fastas: Sequence[str], builddir: str | None):
+def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None):
     """build blast databases from fasta files"""
 
-    buildall(fastas, builddir=builddir)
+    buildall(fastas, builddir=builddir, merge=merge)
 
 
 @blast.command(name="blast")

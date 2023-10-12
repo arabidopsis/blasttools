@@ -340,18 +340,42 @@ def blastall(
     return ddf
 
 
-def buildall(fastafiles: Sequence[str], builddir: str | Path | None = None) -> None:
+def concat_fasta(fastafiles: Sequence[str], out: str) -> None:
+    if out.endswith(".gz"):
+        of = gzip.open(out, "wt")
+    else:
+        of = open(out, "wt", encoding="utf-8")
+    with of:
+        for fa in fastafiles:
+            for rec in read_fasta(fa):
+                SeqIO.write(rec, of, "fasta")
+
+
+def buildall(
+    fastafiles: Sequence[str],
+    builddir: str | Path | None = None,
+    merge: str | None = None,
+) -> None:
     if builddir is not None:
         builddir = Path(builddir)
         if not builddir.exists():
             builddir.mkdir(exist_ok=True, parents=True)
-    for fastafile in fastafiles:
-        fa = Path(fastafile)
-        name = fa.name
-        name, _ = name.split(".", 1)
-        name = name.lower()
-        db = builddir / name if builddir else fa.parent / name
-        b = BlastDb(db)
-        ok = b.run(fa)
-        if not ok:
-            raise RuntimeError(f"can't build database with {fastafile}")
+    out = None
+    if merge:
+        out = f"{merge}.fa.gz"
+        concat_fasta(fastafiles, out)
+        fastafiles = [out]
+    try:
+        for fastafile in fastafiles:
+            fa = Path(fastafile)
+            name = fa.name
+            name, _ = name.split(".", 1)
+            name = name.lower()
+            db = builddir / name if builddir else fa.parent / name
+            b = BlastDb(db)
+            ok = b.run(fa)
+            if not ok:
+                raise RuntimeError(f"can't build database with {fastafile}")
+    finally:
+        if out:
+            remove_files([out])

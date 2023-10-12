@@ -4,7 +4,7 @@ from typing import Sequence
 import click
 from .config import RELEASE
 
-from .blast import (
+from .plants import (
     build,
     blastall,
     fetch_fastas,
@@ -69,7 +69,7 @@ def blast_cmd(
 @plants.command(name="fetch-fastas")
 @click.argument("species", nargs=-1)
 @pass_config
-def fetch_fasta_cmd(cfg: Config, species: Sequence[str]):
+def fasta_fetch_cmd(cfg: Config, species: Sequence[str]):
     """Fetch fasta files"""
     fetch_fastas(species, release=cfg.release)
 
@@ -77,8 +77,8 @@ def fetch_fasta_cmd(cfg: Config, species: Sequence[str]):
 @plants.command()
 @click.argument("species", nargs=-1)
 @pass_config
-def fasta_names(cfg: Config, species: Sequence[str]) -> None:
-    """Find fasta names for plant species"""
+def fasta_filenames(cfg: Config, species: Sequence[str]) -> None:
+    """Find fasta filenames for plant species"""
     for plant, name in zip(species, find_fasta_names(species, release=cfg.release)):
         click.secho(f"{plant}: {name}")
 
