@@ -113,6 +113,5 @@ def fasta_filenames(cfg: Config, species: Sequence[str]) -> None:
 def species_cmd(cfg: Config) -> None:
     """Available species at ensembl"""
     sl = find_species(cfg.release)
-    sl = sorted(sl)
-    for s in sl:
+    for s in sorted(sl):
         print(s)
