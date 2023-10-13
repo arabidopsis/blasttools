@@ -23,7 +23,7 @@ def update() -> None:
 
     ret = subprocess.call([sys.executable, "-m", "pip", "install", "-U", REPO])
     if ret:
-        click.secho(f"can't install {REPO}", fg="red")
+        click.secho(f"can't install {REPO}", fg="red", err=True)
         raise click.Abort()
 
 
@@ -59,6 +59,7 @@ def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None) ->
 @click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--xml", is_flag=True, help="run with xml output")
 @click.option("--with_seq", is_flag=True, help="added sequence data to output")
+@click.option("-h", "--header", help="headers")
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("blastdbs", nargs=-1)
 def blast_cmd(
@@ -68,14 +69,27 @@ def blast_cmd(
     with_seq: bool,
     out: str | None,
     xml: bool,
+    header: str | None,
 ) -> None:
     """blast databases"""
+    from .blastapi import mkheader
     from .blastxml import blastall as blastall5
+
+    if len(blastdbs) == 0:
+        return
+
+    myheader = None
+    if header is not None:
+        if xml:
+            raise click.BadParameter("can't have header with xml", param_hint='xml')
+        myheader = mkheader(header)
 
     if xml:
         df = blastall5(query, toblastdb(blastdbs), with_seq=with_seq, best=best)
     else:
-        df = blastall(query, toblastdb(blastdbs), with_seq=with_seq, best=best)
+        df = blastall(
+            query, toblastdb(blastdbs), with_seq=with_seq, best=best, header=myheader
+        )
     if out is None:
         out = query + ".csv"
 
