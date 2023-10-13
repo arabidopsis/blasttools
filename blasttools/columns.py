@@ -1,5 +1,5 @@
 # valid columns for -outfmt 6
-
+# taken from `blastp -help` output
 VALID = {
     "qseqid": "Query Seq-id",
     "qgi": "Query GI",

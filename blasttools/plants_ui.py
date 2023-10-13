@@ -44,7 +44,7 @@ def build_cmd(cfg: Config, species: Sequence[str]) -> None:
 
 @plants.command(name="blast")
 @click.option("--out", help="output file", type=click.Path(dir_okay=False))
-@click.option("--best", default=2, help="best (lowest) evalues [=0 take all]")
+@click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option(
     "-n", "--names", is_flag=True, help="use descriptive column names in output"

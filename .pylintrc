@@ -4,9 +4,8 @@ disable=missing-docstring,
         import-outside-toplevel,
         invalid-name,
         too-few-public-methods,
-        too-many-arguments
-
-
+        too-many-arguments,
+        use-dict-literal
 
 [FORMAT]
 max-line-length=115

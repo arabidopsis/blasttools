@@ -17,7 +17,8 @@ from .blastapi import safe_which, remove_files, fasta_to_df, find_best, fetch_se
 class BlastXML:
     def runner(self, queryfasta: str, blastdb: str) -> Iterator[Blast]:
         outfmt = "5"
-        out = f"{uuid4()}.xml"
+        key = uuid4()
+        out = f"{key}.xml"
         blastp = safe_which("blastp")
         try:
             r = subprocess.run(
@@ -66,14 +67,15 @@ class Hit:
     hsp_score: float
     hsp_expect: float
     hsp_identities: int
-
+    hsp_positives: int
+    hsp_gaps: int
     hsp_match: str
     hsp_query: str
-    hsp_query_end: int
     hsp_query_start: int
+    hsp_query_end: int
     hsp_sbjct: str
-    hsp_sbjct_end: int
     hsp_sbjct_start: int
+    hsp_sbjct_end: int
 
 
 def unwind(xml: Iterator[Blast]) -> Iterator[tuple[Blast, Alignment, HSP]]:
@@ -101,6 +103,8 @@ def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
             hsp_score=h.score,  # bitscore?
             hsp_expect=h.expect,  # evalue
             hsp_identities=h.identities,
+            hsp_gaps=h.gaps,
+            hsp_positives=h.positives,
             hsp_match=h.match,
             hsp_query=h.query,
             hsp_query_start=h.query_start,  # qstart
@@ -180,8 +184,6 @@ def blastall(
     for blastdb in blastdbs:
         rdf = b5.run(query, blastdb)
 
-        print(rdf.columns, df.columns)
-
         if with_seq and "accession" in rdf.columns:
             saccver = list(rdf["accession"])
             sdf = fetch_seq_df(saccver, blastdb)
@@ -191,7 +193,6 @@ def blastall(
         myrdf = find_best(
             rdf, df, nevalues=best, evalue_col="hsp_expect", query_col="query"
         )
-        print(len(myrdf))
         myrdf["blastdb"] = Path(blastdb).name
         res.append(myrdf)
     ddf = pd.concat(res, axis=0)

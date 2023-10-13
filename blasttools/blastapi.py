@@ -97,6 +97,7 @@ class BlastDb:
 # or http://scikit-bio.org/docs/0.5.4/generated/skbio.io.format.blast6.html
 # https://www.ncbi.nlm.nih.gov/books/NBK279684/ seems out of date
 # default header for -outfmt 6
+# with added 'gaps'
 HEADER = (
     "qaccver",
     "saccver",
@@ -215,10 +216,10 @@ def fetch_seq(seqids: Sequence[str], blastdb: str) -> Iterator[SeqRecord]:
     u = uuid4()
     seqfile = f"{u}.seq"
     out = f"{u}.fasta"
-    with open(seqfile, "wt", encoding="utf-8") as fp:
-        for seq in seqids:
-            print(seq, file=fp)
     try:
+        with open(seqfile, "wt", encoding="utf-8") as fp:
+            for seq in seqids:
+                print(seq, file=fp)
         r = subprocess.run(
             [blastdbcmd, "-db", blastdb, "-out", out, "-entry_batch", seqfile],
             check=False,

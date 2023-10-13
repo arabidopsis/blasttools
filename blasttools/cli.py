@@ -56,7 +56,7 @@ def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None) ->
 
 @blast.command(name="blast")
 @click.option("--out", help="output file", type=click.Path(dir_okay=False))
-@click.option("--best", default=2, help="best (lowest) evalues [=0 take all]")
+@click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--xml", is_flag=True, help="run with xml output")
 @click.option("--with_seq", is_flag=True, help="added sequence data to output")
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
