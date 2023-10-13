@@ -23,6 +23,7 @@ from .blastapi import (
 
 from .blastapi import BlastDb
 
+FASTAS_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/"
 PEP_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/{plant}/pep"
 FTPURL = "ftp.ebi.ac.uk"
 ENSEMBL = f"ftp://{FTPURL}/" + PEP_DIR + "/{file}"
@@ -105,7 +106,7 @@ def fetch_seq_df(seqids: Sequence[str], plant: str, release: int) -> pd.DataFram
 def find_species(release: int) -> list[str]:
     with ftplib.FTP(FTPURL) as ftp:
         ftp.login()
-        ftp.cwd(f"ensemblgenomes/pub/release-{release}/plants/fasta/")
+        ftp.cwd(FASTAS_DIR.format(release=release))
         return list(ftp.nlst())
 
 
@@ -155,23 +156,23 @@ def build(species: Sequence[str], release: int) -> None:
 
 
 def blastall(
-    query: str,
+    queryfasta: str,
     species: Sequence[str],
     release: int,
     best: int,
     with_seq: bool,
     header: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    df = fasta_to_df(query)
+    df = fasta_to_df(queryfasta)
     if not df["id"].is_unique:
         raise click.ClickException(
-            f'sequences IDs are not unique for query file "{query}"'
+            f'sequences IDs are not unique for query file "{queryfasta}"'
         )
     res = []
 
     build(species, release)
     for plant in species:
-        rdf = doblast(query, plant, release=release, header=header)
+        rdf = doblast(queryfasta, plant, release=release, header=header)
 
         if with_seq and "saccver" in rdf.columns:
             saccver = list(rdf["saccver"])

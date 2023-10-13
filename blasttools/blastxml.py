@@ -36,7 +36,7 @@ class BlastXML:
                 check=False,
             )
             if r.returncode:
-                raise click.ClickException("can't blast")
+                raise click.ClickException(f"can't blast {queryfasta}")
             with open(out, "rt", encoding="utf-8") as fp:
                 yield from parse(fp)
         finally:
@@ -171,18 +171,18 @@ def blastxml_to_df(queryfasta: str, blastdb: str) -> pd.DataFrame:
 
 
 def blastall(
-    query: str, blastdbs: Sequence[str], best: int, with_seq: bool
+    queryfasta: str, blastdbs: Sequence[str], best: int, with_seq: bool
 ) -> pd.DataFrame:
-    df = fasta_to_df(query)
+    df = fasta_to_df(queryfasta)
     if not df["id"].is_unique:
         raise click.ClickException(
-            f'sequences IDs are not unique for query file "{query}"'
+            f'sequences IDs are not unique for query file "{queryfasta}"'
         )
     res = []
 
     b5 = BlastXML()
     for blastdb in blastdbs:
-        rdf = b5.run(query, blastdb)
+        rdf = b5.run(queryfasta, blastdb)
 
         if with_seq and "accession" in rdf.columns:
             saccver = list(rdf["accession"])

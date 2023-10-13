@@ -365,18 +365,22 @@ def toblastdb(blastdbs: Sequence[str]) -> list[str]:
 
 
 def blastall(
-    query: str, blastdbs: Sequence[str], best: int, with_seq: bool
+    queryfasta: str,
+    blastdbs: Sequence[str],
+    best: int,
+    with_seq: bool,
+    header: Sequence[str] | None = None,
 ) -> pd.DataFrame:
-    df = fasta_to_df(query)
+    df = fasta_to_df(queryfasta)
     if not df["id"].is_unique:
         raise click.ClickException(
-            f'sequences IDs are not unique for query file "{query}"'
+            f'sequences IDs are not unique for query file "{queryfasta}"'
         )
     res = []
 
-    b6 = Blast6()
+    b6 = Blast6(header)
     for blastdb in blastdbs:
-        rdf = b6.run(query, blastdb)
+        rdf = b6.run(queryfasta, blastdb)
 
         if with_seq and "saccver" in rdf.columns:
             saccver = list(rdf["saccver"])

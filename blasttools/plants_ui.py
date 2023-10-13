@@ -65,13 +65,13 @@ def blast_cmd(
 ) -> None:
     """Run blast on query fasta file"""
     from .columns import VALID
+    if len(species) == 0:
+        return
 
     myheader = None
     if header is not None:
         myheader = mkheader(header)
 
-    if len(species) == 0:
-        return
     df = blastall(
         query,
         species,
