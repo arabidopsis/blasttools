@@ -104,7 +104,7 @@ def blast_cmd(
 
 
 @blast.command(name="headers")
-def header_cmd():
+def header_cmd() -> None:
     from .columns import VALID
     from .blastapi import HEADER
 
