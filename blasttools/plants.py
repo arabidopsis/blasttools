@@ -128,31 +128,46 @@ def fetch_fastas(plants: Sequence[str], release: int) -> None:
             print(r)
 
 
-def build(species: Sequence[str], release: int) -> None:
+def build(species: Sequence[str], release: int) -> bool:
     blastdir = blast_dir(release)
     blastdir.mkdir(parents=True, exist_ok=True)
 
     plants = list(find_fasta_names(species, release=release))
-
+    ret = True
     for info in plants:
         if info.fasta is None:
             continue
         if has_fasta(blastdir, info.fasta):
             continue
-        print(f"fetching {info.fasta} for release: {release}")
+        click.echo(f"fetching {info.fasta} for release: {release}")
         r = fetch_fasta(info.species, info.fasta, release)
         if r.returncode:
-            click.secho(f"failed to fetch {info.fasta}", fg="red", err=True)
+            ret = False
+            click.secho(f"failed to fetch {info.fasta}", fg="red", err=True, bold=True)
 
     for info in plants:
-        if info.fasta is None:
-            continue
         if has_blast_db(blastdir, info.species):
             continue
-        print("creating blast db for", info.species)
+        if info.fasta is None:
+            ret = False
+            click.secho(
+                f'can\'t find fasta file for "{info.species}"',
+                fg="red",
+                bold=True,
+                err=True,
+            )
+            continue
+        click.echo(f"creating blast db for {info.species}")
         ok = mkblast(info.species, info.fasta, release)
         if not ok:
-            print(f"failed to create blast db for {info.species}")
+            ret = False
+            click.secho(
+                f"failed to create blast db for {info.species}",
+                fg="red",
+                bold=True,
+                err=True,
+            )
+    return ret
 
 
 def blastall(
@@ -170,7 +185,10 @@ def blastall(
         )
     res = []
 
-    build(species, release)
+    ok = build(species, release)
+    if not ok:
+        raise click.ClickException("can't build blast databases(s)")
+
     for plant in species:
         rdf = doblast(queryfasta, plant, release=release, header=header)
 

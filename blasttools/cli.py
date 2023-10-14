@@ -50,7 +50,6 @@ def merge_fasta_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
 )
 def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None) -> None:
     """build blast databases from fasta files"""
-
     buildall(fastas, builddir=builddir, merge=merge)
 
 
@@ -59,7 +58,11 @@ def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None) ->
 @click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--xml", is_flag=True, help="run with xml output")
 @click.option("--with_seq", is_flag=True, help="added sequence data to output")
-@click.option("-h", "--header", help="headers")
+@click.option(
+    "-h",
+    "--header",
+    help="space separated list of headers (see headers cmd for a list of valid headers)",
+)
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("blastdbs", nargs=-1)
 def blast_cmd(
@@ -72,26 +75,45 @@ def blast_cmd(
     header: str | None,
 ) -> None:
     """blast databases"""
-    from .blastapi import mkheader
+    from .blastapi import mkheader, has_pdatabase
     from .blastxml import blastall as blastall5
 
     if len(blastdbs) == 0:
         return
+    blastdbs = toblastdb(blastdbs)
+    missing = {b for b in blastdbs if not has_pdatabase(b)}
+    if missing:
+        m = ", ".join(missing)
+        raise click.BadParameter(f"missing databases {m}", param_hint="blastdbs")
 
     myheader = None
     if header is not None:
         if xml:
-            raise click.BadParameter("can't have header with xml", param_hint='xml')
+            raise click.BadParameter("can't have header with xml", param_hint="xml")
         myheader = mkheader(header)
 
     if xml:
-        df = blastall5(query, toblastdb(blastdbs), with_seq=with_seq, best=best)
+        df = blastall5(query, blastdbs, with_seq=with_seq, best=best)
     else:
-        df = blastall(
-            query, toblastdb(blastdbs), with_seq=with_seq, best=best, header=myheader
-        )
+        df = blastall(query, blastdbs, with_seq=with_seq, best=best, header=myheader)
     if out is None:
         out = query + ".csv"
 
     click.secho(f"writing {out}", fg="green")
     save_df(df, out, index=False)
+
+
+@blast.command(name="headers")
+def header_cmd():
+    from .columns import VALID
+    from .blastapi import HEADER
+
+    mx = len(max(VALID, key=len))
+
+    for k, v in VALID.items():
+        s = "*" if k in HEADER else " "
+        click.echo(f"{k:<{mx}}{s}: {v}")
+    click.echo()
+    click.secho(
+        "'*' means default. See `blastp -help` form more information.", fg="yellow"
+    )

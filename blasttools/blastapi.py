@@ -36,6 +36,12 @@ def read_fasta(path: str) -> Iterator[SeqRecord]:
             yield from SeqIO.parse(fp, "fasta")
 
 
+def has_pdatabase(path: str) -> bool:
+    if "." not in path:
+        path += ".pdb"
+    return Path(path).exists()
+
+
 def fasta_to_df(path: str, with_description: bool = False) -> pd.DataFrame:
     def todict1(rec: SeqRecord) -> dict[str, str]:
         return dict(id=rec.id, seq=str(rec.seq).upper())
@@ -356,7 +362,13 @@ def save_df(
     elif ext in {"hdf", "h5"}:
         df.to_hdf(filename, key)
     else:
-        raise ValueError(f"unknown file extension: {filename}")
+        click.secho(
+            f'unknown file extension for "{filename}", saving as csv',
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        df.to_csv(filename, index=index)
 
 
 def toblastdb(blastdbs: Sequence[str]) -> list[str]:

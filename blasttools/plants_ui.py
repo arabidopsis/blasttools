@@ -49,7 +49,11 @@ def build_cmd(cfg: Config, species: Sequence[str]) -> None:
 @click.option(
     "-n", "--names", is_flag=True, help="use descriptive column names in output"
 )
-@click.option("-h", "--header", help="headers")
+@click.option(
+    "-h",
+    "--header",
+    help="space separated list of headers (see headers cmd for a list of valid headers)",
+)
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("species", nargs=-1)
 @pass_config
@@ -65,6 +69,7 @@ def blast_cmd(
 ) -> None:
     """Run blast on query fasta file"""
     from .columns import VALID
+
     if len(species) == 0:
         return
 
@@ -111,7 +116,7 @@ def fasta_filenames(cfg: Config, species: Sequence[str]) -> None:
 @plants.command(name="species")
 @pass_config
 def species_cmd(cfg: Config) -> None:
-    """Available species at ensembl"""
+    """Available species at Ensembl"""
     sl = find_species(cfg.release)
     for s in sorted(sl):
         print(s)
