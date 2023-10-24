@@ -429,14 +429,14 @@ def buildall(
             builddir.mkdir(exist_ok=True, parents=True)
     out = None
     if merge:
-        out = f"{merge}.fa.gz"
+        out = f"{merge}.{uuid4()}.fa.gz"
         concat_fasta(fastafiles, out)
         fastafiles = [out]
     try:
         for fastafile in fastafiles:
             fa = Path(fastafile)
             name = fa.name
-            name, _ = name.split(".", 1)
+            name, _ = name.split(".", maxsplit=1)
             name = name.lower()
             db = builddir / name if builddir else fa.parent / name
             b = BlastDb(db)

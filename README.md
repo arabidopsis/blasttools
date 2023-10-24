@@ -10,7 +10,7 @@ python -m pip install -U 'git+https://github.com/arabidopsis/blasttools.git'
 
 Once installed you can update with `blasttools update`
 
-## Common usages:
+## Common Usages:
 
 Build some blast databases from Ensembl Plants
 
@@ -18,8 +18,15 @@ Build some blast databases from Ensembl Plants
 blasttools plants --release=40 build triticum_aestivum zea_mays
 ```
 
-Blast again my.fasta and save dataframe as pickle file.
+Blast against my.fasta and save dataframe as pickle file.
 
 ```sh
 blasttools plants blast --out=dataframe.pkl my.fasta triticum_aestivum zea_mays
+```
+
+Get your blast data!
+
+```python
+import pandas as pd
+df = pd.read_pickle('dataframe.pkl')
 ```
