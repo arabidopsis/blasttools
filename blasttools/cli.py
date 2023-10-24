@@ -54,14 +54,14 @@ def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None) ->
 
 
 @blast.command(name="blast")
-@click.option("--out", help="output file", type=click.Path(dir_okay=False))
+@click.option("--out", help="output filename (default is to write <query>.csv)", type=click.Path(dir_okay=False))
 @click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--xml", is_flag=True, help="run with xml output")
-@click.option("--with_seq", is_flag=True, help="added sequence data to output")
+@click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option(
-    "-h",
-    "--header",
-    help="space separated list of headers (see headers cmd for a list of valid headers)",
+    "-c",
+    "--columns",
+    help="space separated list of columns (see columns cmd for a list of valid columns)",
 )
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("blastdbs", nargs=-1)
@@ -72,7 +72,7 @@ def blast_cmd(
     with_seq: bool,
     out: str | None,
     xml: bool,
-    header: str | None,
+    columns: str | None,
 ) -> None:
     """blast databases"""
     from .blastapi import mkheader, has_pdatabase
@@ -87,10 +87,10 @@ def blast_cmd(
         raise click.BadParameter(f"missing databases {m}", param_hint="blastdbs")
 
     myheader = None
-    if header is not None:
+    if columns is not None:
         if xml:
             raise click.BadParameter("can't have header with xml", param_hint="xml")
-        myheader = mkheader(header)
+        myheader = mkheader(columns)
 
     if xml:
         df = blastall5(query, blastdbs, with_seq=with_seq, best=best)
@@ -103,8 +103,9 @@ def blast_cmd(
     save_df(df, out, index=False)
 
 
-@blast.command(name="headers")
-def header_cmd() -> None:
+@blast.command(name="columns")
+def columns_cmd() -> None:
+    """Show possible output columns for blast"""
     from .columns import VALID
     from .blastapi import HEADER
 

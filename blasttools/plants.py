@@ -30,7 +30,7 @@ ENSEMBL = f"ftp://{FTPURL}/" + PEP_DIR + "/{file}"
 
 
 def blast_dir(release: int) -> Path:
-    return Path(f"blast-{release}")
+    return Path(f"ensemblblast-{release}")
 
 
 @dataclass

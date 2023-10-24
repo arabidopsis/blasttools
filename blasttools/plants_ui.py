@@ -43,16 +43,16 @@ def build_cmd(cfg: Config, species: Sequence[str]) -> None:
 
 
 @plants.command(name="blast")
-@click.option("--out", help="output file", type=click.Path(dir_okay=False))
+@click.option("--out", help="output filename (default is to write <query>.csv)", type=click.Path(dir_okay=False))
 @click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option(
     "-n", "--names", is_flag=True, help="use descriptive column names in output"
 )
 @click.option(
-    "-h",
-    "--header",
-    help="space separated list of headers (see headers cmd for a list of valid headers)",
+    "-c",
+    "--columns",
+    help="space separated list of columns (see columns cmd for a list of valid columns)",
 )
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("species", nargs=-1)
@@ -65,7 +65,7 @@ def blast_cmd(
     with_seq: bool,
     out: str | None,
     names: bool,
-    header: str | None,
+    columns: str | None,
 ) -> None:
     """Run blast on query fasta file"""
     from .columns import VALID
@@ -74,8 +74,8 @@ def blast_cmd(
         return
 
     myheader = None
-    if header is not None:
-        myheader = mkheader(header)
+    if columns is not None:
+        myheader = mkheader(columns)
 
     df = blastall(
         query,
