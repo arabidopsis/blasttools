@@ -337,6 +337,16 @@ def get_ext(filename: Path) -> str | None:
     return ext
 
 
+def check_ext(filename: str) -> None:
+    ext = get_ext(Path(filename))
+    if ext is not None and ext in OKEXT:
+        return
+    ex = ",".join(OKEXT)
+    raise click.ClickException(
+        f'unknown file type "{filename}": require one of .{{{ex}}}'
+    )
+
+
 def save_df(
     df: pd.DataFrame,
     filename: str | Path,

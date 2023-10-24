@@ -75,8 +75,11 @@ def blast_cmd(
     columns: str | None,
 ) -> None:
     """blast databases"""
-    from .blastapi import mkheader, has_pdatabase
+    from .blastapi import mkheader, has_pdatabase, check_ext
     from .blastxml import blastall as blastall5
+
+    if out is not None:
+        check_ext(out)
 
     if len(blastdbs) == 0:
         return

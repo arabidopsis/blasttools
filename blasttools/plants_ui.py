@@ -43,7 +43,11 @@ def build_cmd(cfg: Config, species: Sequence[str]) -> None:
 
 
 @plants.command(name="blast")
-@click.option("--out", help="output filename (default is to write <query>.csv)", type=click.Path(dir_okay=False))
+@click.option(
+    "--out",
+    help="output filename (default is to write <query>.csv)",
+    type=click.Path(dir_okay=False),
+)
 @click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option(
@@ -68,8 +72,11 @@ def blast_cmd(
     columns: str | None,
 ) -> None:
     """Run blast on query fasta file"""
+    from .blastapi import check_ext
     from .columns import VALID
 
+    if out is not None:
+        check_ext(out)
     if len(species) == 0:
         return
 
