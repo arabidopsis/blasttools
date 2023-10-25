@@ -54,10 +54,15 @@ def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None) ->
 
 
 @blast.command(name="blast")
-@click.option("--out", help="output filename (default is to write <query>.csv)", type=click.Path(dir_okay=False))
+@click.option(
+    "--out",
+    help="output filename (default is to write <query>.csv)",
+    type=click.Path(dir_okay=False),
+)
 @click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--xml", is_flag=True, help="run with xml output")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
+@click.option("-t", "--num-threads", help="number of threads to use", default=1)
 @click.option(
     "-c",
     "--columns",
@@ -73,6 +78,7 @@ def blast_cmd(
     out: str | None,
     xml: bool,
     columns: str | None,
+    num_threads: int,
 ) -> None:
     """blast databases"""
     from .blastapi import mkheader, has_pdatabase, check_ext
@@ -96,9 +102,18 @@ def blast_cmd(
         myheader = mkheader(columns)
 
     if xml:
-        df = blastall5(query, blastdbs, with_seq=with_seq, best=best)
+        df = blastall5(
+            query, blastdbs, with_seq=with_seq, best=best, num_threads=num_threads
+        )
     else:
-        df = blastall(query, blastdbs, with_seq=with_seq, best=best, header=myheader)
+        df = blastall(
+            query,
+            blastdbs,
+            with_seq=with_seq,
+            best=best,
+            header=myheader,
+            num_threads=num_threads,
+        )
     if out is None:
         out = query + ".csv"
 

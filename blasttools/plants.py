@@ -69,18 +69,26 @@ def fetch_fasta(
     return r
 
 
-def mkblast(plant: str, fastafile: str, release: int) -> bool:
-    db = blast_dir(release) / plant
-    bdb = BlastDb(str(db))
-    return bdb.run(fastafile)
+def mkblast(plant: str, fastafile: str|Path, release: int) -> bool:
+    directory = blast_dir(release)
+    db = directory / plant
+    bdb = BlastDb(db)
+    return bdb.run(directory / fastafile)
 
 
 def doblast(
-    queryfasta: str, plant: str, release: int, header: Sequence[str] | None = None
+    queryfasta: str,
+    plant: str,
+    release: int,
+    header: Sequence[str] | None = None,
+    *,
+    num_threads: int = 1,
 ) -> pd.DataFrame:
     blastdir = blast_dir(release)
 
-    return doblast6(queryfasta, str(blastdir / plant), header=header)
+    return doblast6(
+        queryfasta, str(blastdir / plant), header=header, num_threads=num_threads
+    )
 
 
 def has_blast_db(blastdir: Path, plant: str) -> bool:
@@ -135,6 +143,10 @@ def build(species: Sequence[str], release: int) -> bool:
     plants = list(find_fasta_names(species, release=release))
     ret = True
     for info in plants:
+        # we are OK if we have a blast database
+        # but *NO* fasta file
+        if has_blast_db(blastdir, info.species):
+            continue
         if info.fasta is None:
             continue
         if has_fasta(blastdir, info.fasta):
@@ -177,6 +189,8 @@ def blastall(
     best: int,
     with_seq: bool,
     header: Sequence[str] | None = None,
+    *,
+    num_threads: int = 1,
 ) -> pd.DataFrame:
     df = fasta_to_df(queryfasta)
     if not df["id"].is_unique:
@@ -190,7 +204,9 @@ def blastall(
         raise click.ClickException("can't build blast databases(s)")
 
     for plant in species:
-        rdf = doblast(queryfasta, plant, release=release, header=header)
+        rdf = doblast(
+            queryfasta, plant, release=release, header=header, num_threads=num_threads
+        )
 
         if with_seq and "saccver" in rdf.columns:
             saccver = list(rdf["saccver"])

@@ -58,6 +58,7 @@ def build_cmd(cfg: Config, species: Sequence[str]) -> None:
     "--columns",
     help="space separated list of columns (see columns cmd for a list of valid columns)",
 )
+@click.option("-t", "--num-threads", help="number of threads to use", default=1)
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("species", nargs=-1)
 @pass_config
@@ -70,6 +71,7 @@ def blast_cmd(
     out: str | None,
     names: bool,
     columns: str | None,
+    num_threads: int,
 ) -> None:
     """Run blast on query fasta file"""
     from .blastapi import check_ext
@@ -91,6 +93,7 @@ def blast_cmd(
         best=best,
         with_seq=with_seq,
         header=myheader,
+        num_threads=num_threads,
     )
     if out is None:
         out = query + ".csv"

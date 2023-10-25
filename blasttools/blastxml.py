@@ -15,6 +15,9 @@ from .blastapi import safe_which, remove_files, fasta_to_df, find_best, fetch_se
 
 
 class BlastXML:
+    def __init__(self, num_threads: int = 1):
+        self.num_threads = num_threads
+
     def runner(self, queryfasta: str, blastdb: str) -> Iterator[Blast]:
         outfmt = "5"
         key = uuid4()
@@ -32,6 +35,8 @@ class BlastXML:
                     blastdb,
                     "-out",
                     out,
+                    "-num_threads",
+                    str(self.num_threads),
                 ],
                 check=False,
             )
@@ -165,13 +170,18 @@ def hsp_match(hsp: HSP, width: int = 50, right: int = 0) -> str:
     return "\n".join(lines)
 
 
-def blastxml_to_df(queryfasta: str, blastdb: str) -> pd.DataFrame:
-    bs = BlastXML()
+def blastxml_to_df(queryfasta: str, blastdb: str, num_threads: int = 1) -> pd.DataFrame:
+    bs = BlastXML(num_threads=num_threads)
     return pd.DataFrame([asdict(hit) for hit in hits(bs.runner(queryfasta, blastdb))])
 
 
 def blastall(
-    queryfasta: str, blastdbs: Sequence[str], best: int, with_seq: bool
+    queryfasta: str,
+    blastdbs: Sequence[str],
+    best: int,
+    with_seq: bool,
+    *,
+    num_threads: int = 1,
 ) -> pd.DataFrame:
     df = fasta_to_df(queryfasta)
     if not df["id"].is_unique:
@@ -180,7 +190,7 @@ def blastall(
         )
     res = []
 
-    b5 = BlastXML()
+    b5 = BlastXML(num_threads=num_threads)
     for blastdb in blastdbs:
         rdf = b5.run(queryfasta, blastdb)
 

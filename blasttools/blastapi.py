@@ -65,9 +65,9 @@ class BlastDb:
         title = fastafile.name
 
         if fastafile.name.endswith(".gz"):
-            cmd = [safe_which("gunzip"), "--stdout", str(fastafile)]
+            cmd = [safe_which("gunzip"), "--stdout", fastafile.name]
         else:
-            cmd = [safe_which("cat"), str(fastafile)]
+            cmd = [safe_which("cat"), fastafile.name]
         # -parse_seqids so that we can get sequences out from ids with blastdbcmd
         with subprocess.Popen(
             cmd, stdout=subprocess.PIPE, cwd=str(fastafile.parent)
@@ -141,10 +141,11 @@ def mkheader(header: str) -> Sequence[str]:
 
 
 class Blast6:
-    def __init__(self, header: Sequence[str] | None = None):
+    def __init__(self, header: Sequence[str] | None = None, num_threads: int = 1):
         if header is None:
             header = HEADER
         self.header = header
+        self.num_threads = num_threads
 
     def run(
         self,
@@ -166,6 +167,8 @@ class Blast6:
                     blastdb,
                     "-out",
                     out,
+                    "-num_threads",
+                    str(self.num_threads),
                 ],
                 check=False,
             )
@@ -177,9 +180,11 @@ class Blast6:
 
 
 def doblast6(
-    queryfasta: str, blastdb: str, header: Sequence[str] | None = None
+    queryfasta: str, blastdb: str, header: Sequence[str] | None = None,
+    *,
+    num_threads:int =1
 ) -> pd.DataFrame:
-    b6 = Blast6(header)
+    b6 = Blast6(header, num_threads=num_threads)
     return b6.run(queryfasta, blastdb)
 
 
@@ -343,7 +348,7 @@ def check_ext(filename: str) -> None:
         return
     ex = ",".join(OKEXT)
     raise click.ClickException(
-        f'unknown file type "{filename}": require one of .{{{ex}}}'
+        f'unknown output type for file: "{filename}": require extension to be one of .{{{ex}}}'
     )
 
 
@@ -392,6 +397,8 @@ def blastall(
     best: int,
     with_seq: bool,
     header: Sequence[str] | None = None,
+    *,
+    num_threads: int = 1,
 ) -> pd.DataFrame:
     df = fasta_to_df(queryfasta)
     if not df["id"].is_unique:
@@ -400,7 +407,7 @@ def blastall(
         )
     res = []
 
-    b6 = Blast6(header)
+    b6 = Blast6(header, num_threads=num_threads)
     for blastdb in blastdbs:
         rdf = b6.run(queryfasta, blastdb)
 
