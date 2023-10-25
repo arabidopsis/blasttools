@@ -34,7 +34,7 @@ df = pd.read_pickle('dataframe.pkl')
 ## Parallelization
 
 When blasting you can specify `--num-threads` which is passed directly to the
-blast command. If you want to parallelize over species or fasta files currently
+blast command. If you want to parallelize over species, databases or fasta files: currently
 I suggest you use [GNU Parallel](https://www.gnu.org/software/parallel/) [[Tutorial](https://blog.ronin.cloud/gnu-parallel/)]
 e.g. build blast databases concurrently:
 
@@ -42,8 +42,14 @@ e.g. build blast databases concurrently:
 parallel blasttools build ::: *.fa.gz
 ```
 
-Or build *everything*!
+Or blast *everything*!
 
 ```sh
 parallel blasttools plants build ::: $(blasttools plants species)
+# must have different output files here...
+parallel blasttools plants blast --out=my{}.pkl my.fasta ::: $(blasttools plants species)
 ```
+
+Remember if you parallelize your blasts *and* use `--num-threads > 1`
+then you are probably going to be fighting for cpu time
+amongst yourselves!
