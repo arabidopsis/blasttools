@@ -45,9 +45,10 @@ parallel blasttools build ::: *.fa.gz
 Or blast *everything*!
 
 ```sh
-parallel blasttools plants build ::: $(blasttools plants species)
+species=$(blasttools plants species)
+parallel blasttools plants build ::: $species
 # must have different output files here...
-parallel blasttools plants blast --out=my{}.pkl my.fasta ::: $(blasttools plants species)
+parallel blasttools plants blast --out=my{}.pkl my.fasta ::: $species
 ```
 
 Remember if you parallelize your blasts *and* use `--num-threads > 1`
