@@ -180,9 +180,11 @@ class Blast6:
 
 
 def doblast6(
-    queryfasta: str, blastdb: str, header: Sequence[str] | None = None,
+    queryfasta: str,
+    blastdb: str,
+    header: Sequence[str] | None = None,
     *,
-    num_threads:int =1
+    num_threads: int = 1,
 ) -> pd.DataFrame:
     b6 = Blast6(header, num_threads=num_threads)
     return b6.run(queryfasta, blastdb)

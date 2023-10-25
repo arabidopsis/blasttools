@@ -69,7 +69,7 @@ def fetch_fasta(
     return r
 
 
-def mkblast(plant: str, fastafile: str|Path, release: int) -> bool:
+def mkblast(plant: str, fastafile: str | Path, release: int) -> bool:
     directory = blast_dir(release)
     db = directory / plant
     bdb = BlastDb(db)
@@ -125,15 +125,15 @@ def fetch_fastas(plants: Sequence[str], release: int) -> None:
 
     for info in find_fasta_names(plants, release):
         if info.fasta is None:
-            print(f"can't find fasta for {info.species}!")
+            click.echo(f"can't find fasta for {info.species}!", err=True)
             continue
 
         if (bd / info.fasta).exists():
             continue
-        print("fetching", info.fasta)
+        click.echo(f"fetching {info.fasta}")
         r = fetch_fasta(info.species, info.fasta, release=release)
         if r.returncode:
-            print(r)
+            click.secho(f"failed to fetch {info.fasta}: {r}", fg="red", err=True)
 
 
 def build(species: Sequence[str], release: int) -> bool:
@@ -155,7 +155,13 @@ def build(species: Sequence[str], release: int) -> bool:
         r = fetch_fasta(info.species, info.fasta, release)
         if r.returncode:
             ret = False
-            click.secho(f"failed to fetch {info.fasta}", fg="red", err=True, bold=True)
+            click.secho(
+                f"failed to fetch {info.fasta}",
+                fg="red",
+                bold=True,
+                err=True,
+                bold=True,
+            )
 
     for info in plants:
         if has_blast_db(blastdir, info.species):

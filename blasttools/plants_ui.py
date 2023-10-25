@@ -129,4 +129,4 @@ def species_cmd(cfg: Config) -> None:
     """Available species at Ensembl"""
     sl = find_species(cfg.release)
     for s in sorted(sl):
-        print(s)
+        click.echo(s)
