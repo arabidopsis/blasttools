@@ -98,7 +98,9 @@ def blast_cmd(
     myheader = None
     if columns is not None:
         if xml:
-            raise click.BadParameter("can't have header with xml", param_hint="xml")
+            raise click.BadParameter(
+                'can\'t have "--columns" with "--xml"', param_hint="xml"
+            )
         myheader = mkheader(columns)
 
     if xml:

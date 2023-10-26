@@ -82,9 +82,12 @@ def doblast(
     release: int,
     header: Sequence[str] | None = None,
     *,
+    path: str | None,
     num_threads: int = 1,
 ) -> pd.DataFrame:
     blastdir = blast_dir(release)
+    if path is not None:
+        blastdir = Path(path) / blastdir
 
     return doblast6(
         queryfasta, str(blastdir / plant), header=header, num_threads=num_threads
@@ -99,8 +102,12 @@ def has_fasta(blastdir: Path, filename: str) -> bool:
     return (blastdir / filename).exists()
 
 
-def fetch_seq_df(seqids: Sequence[str], plant: str, release: int) -> pd.DataFrame:
+def fetch_seq_df(
+    seqids: Sequence[str], plant: str, release: int, *, path: str | None
+) -> pd.DataFrame:
     blastdir = blast_dir(release)
+    if path is not None:
+        blastdir = Path(path) / blastdir
     blastdb = str(blastdir / plant)
 
     return pd.DataFrame(
@@ -136,8 +143,10 @@ def fetch_fastas(plants: Sequence[str], release: int) -> None:
             click.secho(f"failed to fetch {info.fasta}: {r}", fg="red", err=True)
 
 
-def build(species: Sequence[str], release: int) -> bool:
+def build(species: Sequence[str], release: int, *, path: str | None = None) -> bool:
     blastdir = blast_dir(release)
+    if path is not None:
+        blastdir = Path(path) / blastdir
     blastdir.mkdir(parents=True, exist_ok=True)
 
     plants = list(find_fasta_names(species, release=release))
@@ -160,7 +169,6 @@ def build(species: Sequence[str], release: int) -> bool:
                 fg="red",
                 bold=True,
                 err=True,
-                bold=True,
             )
 
     for info in plants:
@@ -196,6 +204,7 @@ def blastall(
     with_seq: bool,
     header: Sequence[str] | None = None,
     *,
+    path: str | None,
     num_threads: int = 1,
 ) -> pd.DataFrame:
     df = fasta_to_df(queryfasta)
@@ -205,18 +214,23 @@ def blastall(
         )
     res = []
 
-    ok = build(species, release)
+    ok = build(species, release, path=path)
     if not ok:
         raise click.ClickException("can't build blast databases(s)")
 
     for plant in species:
         rdf = doblast(
-            queryfasta, plant, release=release, header=header, num_threads=num_threads
+            queryfasta,
+            plant,
+            release=release,
+            header=header,
+            num_threads=num_threads,
+            path=path,
         )
 
         if with_seq and "saccver" in rdf.columns:
             saccver = list(rdf["saccver"])
-            sdf = fetch_seq_df(saccver, plant, release)
+            sdf = fetch_seq_df(saccver, plant, release, path=path)
             rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
         myrdf = find_best(rdf, df, nevalues=best)

@@ -34,12 +34,26 @@ def plants(ctx: click.Context, release: int) -> None:
     ctx.obj = Config(release=release)
 
 
-@plants.command(name="build")
+BUILD = """
+Blast databases will be named after the species name and
+placed in the directory 'ensembleblast-{release}' (which will be created)
+(e.g. 'ensemblblast-57/zea_mays.p*')
+"""
+
+
+@plants.command(name="build", epilog=click.style(BUILD, fg="magenta"))
+@click.option(
+    "-b",
+    "--build",
+    "builddir",
+    type=click.Path(file_okay=False, dir_okay=True),
+    help="build all 'ensembleblast-{release}' directories in this directory",
+)
 @click.argument("species", nargs=-1)
 @pass_config
-def build_cmd(cfg: Config, species: Sequence[str]) -> None:
+def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None:
     """Download and build blast databases"""
-    build(species, release=cfg.release)
+    build(species, release=cfg.release, path=builddir)
 
 
 @plants.command(name="blast")
@@ -58,6 +72,13 @@ def build_cmd(cfg: Config, species: Sequence[str]) -> None:
     "--columns",
     help="space separated list of columns (see columns cmd for a list of valid columns)",
 )
+@click.option(
+    "-b",
+    "--build",
+    "builddir",
+    type=click.Path(file_okay=False, dir_okay=True),
+    help="find all 'ensembleblast-{release}' directories in this directory",
+)
 @click.option("-t", "--num-threads", help="number of threads to use", default=1)
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("species", nargs=-1)
@@ -72,6 +93,7 @@ def blast_cmd(
     names: bool,
     columns: str | None,
     num_threads: int,
+    builddir: str | None,
 ) -> None:
     """Run blast on query fasta file"""
     from .blastapi import check_ext
@@ -94,6 +116,7 @@ def blast_cmd(
         with_seq=with_seq,
         header=myheader,
         num_threads=num_threads,
+        path=builddir,
     )
     if out is None:
         out = query + ".csv"
