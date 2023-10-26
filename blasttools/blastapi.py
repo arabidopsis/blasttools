@@ -216,7 +216,7 @@ def write_fasta(df: pd.DataFrame, filename: str) -> None:
                 SeqIO.write(toseq(row), fp, format="fasta")
 
 
-def remove_files(files: list[str]) -> None:
+def remove_files(files: list[str | Path]) -> None:
     for f in files:
         try:
             os.remove(f)
@@ -388,8 +388,32 @@ def save_df(
         df.to_csv(filename, index=index)
 
 
+def read_df(
+    filename: str | Path,
+    key: str = "blast",
+) -> pd.DataFrame | None:
+    filename = Path(filename)
+    ext = get_ext(filename)
+    if ext is None:
+        return None
+
+    elif ext == "xlsx":
+        return pd.read_excel(filename)
+    elif ext == "feather":
+        return pd.read_feather(filename)
+    elif ext == "parquet":
+        return pd.read_parquet(filename)
+    elif ext in {"pkl", "pickle"}:
+        return pd.read_pickle(filename)
+    elif ext in {"hdf", "h5"}:
+        return pd.read_hdf(filename, key) # type: ignore
+
+    # if ext == "csv":
+    return pd.read_csv(filename)
+
+
 def toblastdb(blastdbs: Sequence[str]) -> list[str]:
-    s = {b.rsplit(".", 1)[0] for b in blastdbs}
+    s = {b.rsplit(".", maxsplit=1)[0] for b in blastdbs}
     return sorted(s)
 
 

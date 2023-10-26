@@ -73,6 +73,13 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     help="space separated list of columns (see columns cmd for a list of valid columns)",
 )
 @click.option(
+    "-a",
+    "--all",
+    "all_db",
+    is_flag=True,
+    help="try all available databases",
+)
+@click.option(
     "-b",
     "--build",
     "builddir",
@@ -94,19 +101,26 @@ def blast_cmd(
     columns: str | None,
     num_threads: int,
     builddir: str | None,
+    all_db: bool,
 ) -> None:
     """Run blast on query fasta file"""
     from .blastapi import check_ext
+    from .plants import available_species
     from .columns import VALID
 
+    if len(species) == 0 and not all_db:
+        return
     if out is not None:
         check_ext(out)
-    if len(species) == 0:
-        return
 
     myheader = None
     if columns is not None:
         myheader = mkheader(columns)
+
+    if all_db:
+        species = available_species(cfg.release)
+        if len(species) == 0:
+            return
 
     df = blastall(
         query,
@@ -135,15 +149,24 @@ def fasta_fetch_cmd(cfg: Config, species: Sequence[str]) -> None:
 
 
 @plants.command()
+@click.option("-f", "--full", is_flag=True, help="show full URL to file")
 @click.argument("species", nargs=-1)
 @pass_config
-def fasta_filenames(cfg: Config, species: Sequence[str]) -> None:
+def fasta_filenames(cfg: Config, species: Sequence[str], full: bool) -> None:
     """Find fasta filenames for plant species"""
+    from .plants import ENSEMBL
+
     for info in find_fasta_names(species, release=cfg.release):
         if info.fasta is None:
             click.secho(f"{info.species}: no fasta!", fg="red", bold=True)
         else:
-            click.secho(f"{info.species}: {info.fasta}")
+            if full:
+                fasta = ENSEMBL.format(
+                    release=cfg.release, plant=info.species, file=info.fasta
+                )
+                click.secho(f"{info.species}: {fasta}")
+            else:
+                click.secho(f"{info.species}: {info.fasta}")
 
 
 @plants.command(name="species")

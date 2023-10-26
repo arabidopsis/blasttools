@@ -2,7 +2,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 import click
 
-from .blastapi import merge_fasta, buildall, blastall, save_df, toblastdb
+from .blastapi import (
+    merge_fasta,
+    buildall,
+    blastall,
+    save_df,
+    toblastdb,
+    check_ext,
+    read_df,
+)
 
 
 @click.group(
@@ -81,7 +89,7 @@ def blast_cmd(
     num_threads: int,
 ) -> None:
     """blast databases"""
-    from .blastapi import mkheader, has_pdatabase, check_ext
+    from .blastapi import mkheader, has_pdatabase
     from .blastxml import blastall as blastall5
 
     if out is not None:
@@ -118,7 +126,6 @@ def blast_cmd(
         )
     if out is None:
         out = query + ".csv"
-
     click.secho(f"writing {out}", fg="green")
     save_df(df, out, index=False)
 
@@ -138,3 +145,33 @@ def columns_cmd() -> None:
     click.secho(
         "'*' means default. See `blastp -help` form more information.", fg="yellow"
     )
+
+
+@blast.command(name="concat")
+@click.option(
+    "--out",
+    help="output filename. If not specified, write CSV to stdout",
+    type=click.Path(dir_okay=False),
+)
+@click.argument("dataframes", nargs=-1, type=click.Path(dir_okay=False, exists=True))
+def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
+    """Concatenate multiple saved DataFrames"""
+    import sys
+    import pandas as pd
+
+    if out is not None:
+        check_ext(out)
+
+    dfs = []
+    for df in dataframes:
+        res = read_df(df)
+        if res is None:
+            click.secho(f"can't read {df}", err=True, bold=True, fg="red")
+            continue
+        dfs.append(res)
+
+    odf = pd.concat(dfs, axis=0)
+    if out is not None:
+        save_df(odf, out)
+    else:
+        odf.to_csv(sys.stdout, index=False)

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import ftplib
 import glob
 import subprocess
+from shutil import which
 
 from pathlib import Path
 
@@ -19,6 +20,7 @@ from .blastapi import (
     doblast6,
     fetch_seq as fetch_seq_raw,
     find_best,
+    remove_files,
 )
 
 from .blastapi import BlastDb
@@ -53,19 +55,35 @@ def find_fasta_names(plants: Sequence[str], release: int) -> Iterator[FileInfo]:
 
 
 def fetch_fasta(
-    plant: str, filename: str, release: int
+    plant: str, filename: str, release: int, *, quiet: bool = False
 ) -> subprocess.CompletedProcess[bytes]:
-    curl = safe_which("curl")
-    r = subprocess.run(
-        [
+    cwd = blast_dir(release)
+    wget = which("wget")
+    if wget is not None:
+        q = ["-q"] if quiet else []
+        cmds = [
+            wget,
+            *q,
+            "-O",
+            filename,
+        ]
+    else:
+        curl = safe_which("curl")
+        q = ["--silent"] if quiet else []
+        cmds = [
             curl,
+            *q,
             "-o",
             filename,
-            ENSEMBL.format(release=release, plant=plant, file=filename),
-        ],
-        cwd=str(blast_dir(release)),
+        ]
+    cmds.append(ENSEMBL.format(release=release, plant=plant, file=filename))
+    r = subprocess.run(
+        cmds,
+        cwd=str(cwd),
         check=False,
     )
+    if r != 0:
+        remove_files([cwd / filename])
     return r
 
 
@@ -239,3 +257,12 @@ def blastall(
     ddf = pd.concat(res, axis=0)
 
     return ddf
+
+
+def available_species(release: int) -> list[str]:
+    db = blast_dir(release)
+    ret = set()
+    for path in db.glob("*.pot"):
+        n, _ = path.name.split(".", maxsplit=1)
+        ret.add(n)
+    return list(ret)
