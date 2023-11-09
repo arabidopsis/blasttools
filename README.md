@@ -63,11 +63,11 @@ parallel -N4 blasttools plants blast --out='my{#}.pkl' my.fasta ::: $species
 Then gather them together...
 
 ```python
-import pandas as pd
 from glob import glob
+import pandas as pd
 df = pd.concat([pd.read_pickle(f) for f in glob('my*.pkl')], ignore_index=True)
 ```
 
-Remember if you parallelize your blasts _and_ use `--num-threads > 1`
+Remember: if you parallelize your blasts _and_ use `--num-threads > 1`
 then you are probably going to be fighting for cpu time
 amongst yourselves!
