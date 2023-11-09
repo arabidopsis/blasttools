@@ -63,15 +63,15 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     help="output filename (default is to write <query>.csv)",
     type=click.Path(dir_okay=False),
 )
-@click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
+@click.option("--best", default=0, help="best (lowest) evalues [=0 take all]  (see also --expr)")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option(
     "-n", "--names", is_flag=True, help="use descriptive column names in output"
 )
 @click.option(
-    "-w", "--with-description", is_flag=True, help="include query description"
+    "-d", "--with-description", is_flag=True, help="include query description"
 )
-@click.option("--expr", help="evalue expression", default=EVALUE)
+@click.option("--expr", help="expression to minimize", default=EVALUE, show_default=True)
 @click.option(
     "-c",
     "--columns",

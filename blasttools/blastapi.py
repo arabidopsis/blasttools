@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import click
 import pandas as pd
+from pandas.errors import UndefinedVariableError
 
 from Bio import SeqIO  # type: ignore
 from Bio.SeqRecord import SeqRecord  # type: ignore
@@ -447,7 +448,15 @@ def toblastdb(blastdbs: Sequence[str]) -> list[str]:
 
 def check_expr(headers: Sequence[str], expr: str):
     df = pd.DataFrame({col: [] for col in headers})
-    df.eval(expr)
+    try:
+        df.eval(expr)
+    except UndefinedVariableError as exc:
+        raise click.BadParameter(
+            f"expression supplied references unknown column(s): {exc}",
+            param_hint="expr",
+        ) from exc
+    except SyntaxError as exc:
+        raise click.BadParameter(str(exc), param_hint="expr") from exc
 
 
 def blastall(

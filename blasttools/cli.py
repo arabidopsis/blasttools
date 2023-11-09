@@ -76,14 +76,14 @@ def build_cmd(
     type=click.Path(dir_okay=False),
 )
 @click.option(
-    "-w", "--with-description", is_flag=True, help="include query description"
+    "-d", "--with-description", is_flag=True, help="include query description"
 )
-@click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
+@click.option("--best", default=0, help="best (lowest) evalues [=0 take all] (see also --expr)")
 @click.option("--xml", is_flag=True, help="run with xml output")
 @click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option("-t", "--num-threads", help="number of threads to use", default=1)
-@click.option("--expr", help="evalue expression", default=EVALUE)
+@click.option("--expr", help="expression to minimize", default=EVALUE, show_default=True)
 @click.option(
     "-c",
     "--columns",

@@ -5,7 +5,7 @@ import subprocess
 from typing import Iterator
 from collections.abc import Sequence
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 from uuid import uuid4
 import pandas as pd
 import click
@@ -17,7 +17,6 @@ from .blastapi import (
     fasta_to_df,
     find_best,
     fetch_seq_df,
-    EVALUE,
     check_expr,
 )
 
@@ -93,6 +92,9 @@ class Hit:
     hsp_sbjct: str
     hsp_sbjct_start: int
     hsp_sbjct_end: int
+
+
+HEADER = [f.name for f in fields(Hit)]
 
 
 def unwind(xml: Iterator[Blast]) -> Iterator[tuple[Blast, Alignment, HSP]]:
@@ -200,6 +202,8 @@ def blastall(
     with_description: bool = True,
     expr: str = "hsp_expect",
 ) -> pd.DataFrame:
+    if expr not in HEADER:
+        check_expr(HEADER, expr)  # fail early
     df = fasta_to_df(queryfasta, with_description=with_description)
     if not df["id"].is_unique:
         raise click.ClickException(

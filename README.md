@@ -1,6 +1,6 @@
 # blasttools
 
-tools for running blasts. i.e. turning blast queries into pandas dataframes.
+Command for turning blast queries into pandas dataframes.
 
 Install with
 
@@ -24,12 +24,11 @@ Find out what species are available:
 blasttools plants --release=40 species
 ```
 
-Blast against my.fasta and save dataframe as pickle file.
+Blast against `my.fasta` and save dataframe as a pickle file (the default is to
+save as a csv file named `my.fasta.csv`).
 
 ```sh
 blasttools plants blast --out=dataframe.pkl my.fasta triticum_aestivum zea_mays
-# OR just all downloaded databases
-blasttools plants blast --all --out=dataframe.pkl my.fasta
 ```
 
 Get your blast data!
@@ -42,7 +41,7 @@ df = pd.read_pickle('dataframe.pkl')
 ## Parallelization
 
 When blasting, you can specify `--num-threads` which is passed directly to the
-blast command. If you want to parallelize over species, databases or fasta files, currently
+underlying blast command. If you want to parallelize over species, databases or fasta files,
 I suggest you use [GNU Parallel](https://www.gnu.org/software/parallel/) [[Tutorial](https://blog.ronin.cloud/gnu-parallel/)]
 e.g. build blast databases concurrently:
 
@@ -58,7 +57,15 @@ parallel blasttools plants build ::: $species
 # must have different output files here...
 parallel blasttools plants blast --out=my{}.pkl my.fasta ::: $species
 # or in batches of 4 species at a time
-parallel -N4 blasttools plants blast --out=my{#}.pkl my.fasta ::: $species
+parallel -N4 blasttools plants blast --out='my{#}.pkl' my.fasta ::: $species
+```
+
+Then gather them together...
+
+```python
+import pandas as pd
+from glob import glob
+df = pd.concat([pd.read_pickle(f) for f in glob('my*.pkl')], ignore_index=True)
 ```
 
 Remember if you parallelize your blasts _and_ use `--num-threads > 1`
