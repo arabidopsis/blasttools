@@ -16,7 +16,7 @@ def exact(query: str, subjects: Sequence[str]) -> pd.DataFrame:
     for subject in subjects:
         for rec in read_fasta(subject):
             for r in df.itertuples():
-                if str(r.seq) in str(rec.seq):
+                if str(r.seq).upper() in str(rec.seq).upper():
                     dd[r.id].append(rec.id)
 
     ret: dict[str, list[Any]] = dict(id=[],  description=[], exact=[], subject=[])
