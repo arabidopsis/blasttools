@@ -11,22 +11,34 @@ import pandas as pd
 import click
 from Bio.Blast.NCBIXML import parse  # type: ignore
 from Bio.Blast.Record import Blast, Alignment, HSP  # type: ignore
-from .blastapi import safe_which, remove_files, fasta_to_df, find_best, fetch_seq_df
+from .blastapi import (
+    safe_which,
+    remove_files,
+    fasta_to_df,
+    find_best,
+    fetch_seq_df,
+    EVALUE,
+    check_expr,
+)
 
 
 class BlastXML:
-    def __init__(self, num_threads: int = 1):
+    def __init__(self, num_threads: int = 1, blastp: bool = True):
         self.num_threads = num_threads
+        self.blastp = blastp
+
+    def get_blast(self) -> str:
+        return safe_which("blastp") if self.blastp else safe_which("blastn")
 
     def runner(self, queryfasta: str, blastdb: str) -> Iterator[Blast]:
         outfmt = "5"
         key = uuid4()
         out = f"{key}.xml"
-        blastp = safe_which("blastp")
+        blast = self.get_blast()
         try:
             r = subprocess.run(
                 [
-                    blastp,
+                    blast,
                     "-outfmt",
                     outfmt,
                     "-query",
@@ -170,8 +182,10 @@ def hsp_match(hsp: HSP, width: int = 50, right: int = 0) -> str:
     return "\n".join(lines)
 
 
-def blastxml_to_df(queryfasta: str, blastdb: str, num_threads: int = 1) -> pd.DataFrame:
-    bs = BlastXML(num_threads=num_threads)
+def blastxml_to_df(
+    queryfasta: str, blastdb: str, num_threads: int = 1, blastp: bool = True
+) -> pd.DataFrame:
+    bs = BlastXML(num_threads=num_threads, blastp=blastp)
     return pd.DataFrame([asdict(hit) for hit in hits(bs.runner(queryfasta, blastdb))])
 
 
@@ -182,15 +196,18 @@ def blastall(
     with_seq: bool,
     *,
     num_threads: int = 1,
+    blastp: bool = True,
+    with_description: bool = True,
+    expr: str = "hsp_expect",
 ) -> pd.DataFrame:
-    df = fasta_to_df(queryfasta)
+    df = fasta_to_df(queryfasta, with_description=with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
             f'sequences IDs are not unique for query file "{queryfasta}"'
         )
     res = []
 
-    b5 = BlastXML(num_threads=num_threads)
+    b5 = BlastXML(num_threads=num_threads, blastp=blastp)
     for blastdb in blastdbs:
         rdf = b5.run(queryfasta, blastdb)
 
@@ -200,9 +217,7 @@ def blastall(
             sdf.rename(columns={"saccver": "accession"}, inplace=True)
             rdf = pd.merge(rdf, sdf, left_on="accession", right_on="accession")
 
-        myrdf = find_best(
-            rdf, df, nevalues=best, evalue_col="hsp_expect", query_col="query"
-        )
+        myrdf = find_best(rdf, df, nevalues=best, evalue_col=expr, query_col="query")
         myrdf["blastdb"] = Path(blastdb).name
         res.append(myrdf)
     ddf = pd.concat(res, axis=0)

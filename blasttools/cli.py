@@ -10,6 +10,7 @@ from .blastapi import (
     toblastdb,
     check_ext,
     read_df,
+    EVALUE,
 )
 
 
@@ -52,13 +53,20 @@ def merge_fasta_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
     type=click.Path(file_okay=False, dir_okay=True),
     help="build all databases in this directory",
 )
-@click.option("-m", "--merge", help="merge all fastafiles into one")
+@click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
+@click.option(
+    "-m",
+    "--merge",
+    help="merge all fastafiles into one (and create one blast database)",
+)
 @click.argument(
     "fastas", nargs=-1, type=click.Path(exists=True, file_okay=True, dir_okay=False)
 )
-def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None) -> None:
-    """build blast databases from fasta files"""
-    buildall(fastas, builddir=builddir, merge=merge)
+def build_cmd(
+    fastas: Sequence[str], builddir: str | None, merge: str | None, nucl: bool
+) -> None:
+    """Build blast databases from fasta files"""
+    buildall(fastas, builddir=builddir, merge=merge, blastp=not nucl)
 
 
 @blast.command(name="blast")
@@ -67,10 +75,15 @@ def build_cmd(fastas: Sequence[str], builddir: str | None, merge: str | None) ->
     help="output filename (default is to write <query>.csv)",
     type=click.Path(dir_okay=False),
 )
+@click.option(
+    "-w", "--with-description", is_flag=True, help="include query description"
+)
 @click.option("--best", default=0, help="best (lowest) evalues [=0 take all]")
 @click.option("--xml", is_flag=True, help="run with xml output")
+@click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option("-t", "--num-threads", help="number of threads to use", default=1)
+@click.option("--expr", help="evalue expression", default=EVALUE)
 @click.option(
     "-c",
     "--columns",
@@ -87,8 +100,11 @@ def blast_cmd(
     xml: bool,
     columns: str | None,
     num_threads: int,
+    nucl: bool,
+    with_description: bool,
+    expr: str,
 ) -> None:
-    """blast databases"""
+    """Run a blast query over specified databases"""
     from .blastapi import mkheader, has_pdatabase
     from .blastxml import blastall as blastall5
 
@@ -112,8 +128,17 @@ def blast_cmd(
         myheader = mkheader(columns)
 
     if xml:
+        if expr == EVALUE:
+            expr = "hsp_expect"
         df = blastall5(
-            query, blastdbs, with_seq=with_seq, best=best, num_threads=num_threads
+            query,
+            blastdbs,
+            with_seq=with_seq,
+            best=best,
+            num_threads=num_threads,
+            blastp=not nucl,
+            with_description=with_description,
+            expr=expr,
         )
     else:
         df = blastall(
@@ -123,6 +148,9 @@ def blast_cmd(
             best=best,
             header=myheader,
             num_threads=num_threads,
+            blastp=not nucl,
+            with_description=with_description,
+            expr=expr,
         )
     if out is None:
         out = query + ".csv"

@@ -10,6 +10,7 @@ from .plants import (
     fetch_fastas,
     find_fasta_names,
     find_species,
+    EVALUE,
 )
 
 from .cli import blast
@@ -68,6 +69,10 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     "-n", "--names", is_flag=True, help="use descriptive column names in output"
 )
 @click.option(
+    "-w", "--with-description", is_flag=True, help="include query description"
+)
+@click.option("--expr", help="evalue expression", default=EVALUE)
+@click.option(
     "-c",
     "--columns",
     help="space separated list of columns (see columns cmd for a list of valid columns)",
@@ -102,6 +107,8 @@ def blast_cmd(
     num_threads: int,
     builddir: str | None,
     all_db: bool,
+    with_description: bool,
+    expr: str,
 ) -> None:
     """Run blast on query fasta file"""
     from .blastapi import check_ext
@@ -131,6 +138,8 @@ def blast_cmd(
         header=myheader,
         num_threads=num_threads,
         path=builddir,
+        with_description=with_description,
+        expr=expr,
     )
     if out is None:
         out = query + ".csv"

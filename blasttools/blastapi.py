@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from typing import Iterator, Sequence
-
 from functools import cache
 import gzip
 import os
@@ -54,8 +53,9 @@ def fasta_to_df(path: str, with_description: bool = False) -> pd.DataFrame:
 
 
 class BlastDb:
-    def __init__(self, database: str | Path):
+    def __init__(self, database: str | Path, *, blastp: bool = True):
         self.database = Path(database)
+        self.blastp = blastp
 
     def run(self, fastafile: str | Path) -> bool:
         makeblastdb = safe_which("makeblastdb")
@@ -81,7 +81,7 @@ class BlastDb:
                     out,
                     "-input_type=fasta",
                     "-dbtype",
-                    "prot",
+                    "prot" if self.blastp else "nucl",
                     "-title",
                     title,
                     "-parse_seqids",
@@ -141,24 +141,33 @@ def mkheader(header: str) -> Sequence[str]:
 
 
 class Blast6:
-    def __init__(self, header: Sequence[str] | None = None, num_threads: int = 1):
+    def __init__(
+        self,
+        header: Sequence[str] | None = None,
+        num_threads: int = 1,
+        blastp: bool = True,
+    ):
         if header is None:
             header = HEADER
         self.header = header
         self.num_threads = num_threads
+        self.blastp = blastp
+
+    def get_blast(self) -> str:
+        return safe_which("blastp") if self.blastp else safe_which("blastn")
 
     def run(
         self,
         queryfasta: str,
         blastdb: str,
     ) -> pd.DataFrame:
-        blastp = safe_which("blastp")
+        blast = self.get_blast()
         outfmt = f'6 {" ".join(self.header)}'
         out = f"{uuid4()}.tsv"
         try:
             r = subprocess.run(
                 [
-                    blastp,
+                    blast,
                     "-outfmt",
                     outfmt,
                     "-query",
@@ -173,7 +182,8 @@ class Blast6:
                 check=False,
             )
             if r.returncode:
-                raise click.ClickException(f"can't run blastp using {queryfasta}")
+                b = "blastp" if self.blastp else "blastn"
+                raise click.ClickException(f"can't run {b} using {queryfasta}")
             return out6_to_df(out, self.header)
         finally:
             remove_files([out])
@@ -288,6 +298,9 @@ def merge_fasta(
     write_fasta(df, out)
 
 
+EVAL_COL = "__xxxx__"
+
+
 def find_best(
     blast_df: pd.DataFrame,
     query_df: pd.DataFrame,
@@ -295,6 +308,9 @@ def find_best(
     evalue_col: str = EVALUE,
     query_col: str = QUERY,
 ) -> pd.DataFrame:
+    if evalue_col not in blast_df:
+        blast_df[EVAL_COL] = blast_df.eval(query_col)
+
     if nevalues > 0:
         r = (
             blast_df.groupby(query_col)[evalue_col]
@@ -307,7 +323,10 @@ def find_best(
     else:
         myrdf = blast_df.sort_values([query_col, evalue_col], ascending=[True, True])
     myrdf = pd.merge(myrdf, query_df, left_on=query_col, right_on="id")
-    myrdf.drop(columns=["id"], inplace=True)
+    todrop = ["id"]
+    if EVAL_COL in myrdf:
+        todrop.append(EVAL_COL)
+    myrdf.drop(columns=todrop, inplace=True)
     return myrdf
 
 
@@ -365,27 +384,36 @@ def save_df(
     ext = get_ext(filename)
     if ext is None:
         ext = default
-
-    if ext == "csv":
-        df.to_csv(filename, index=index)
-    elif ext == "xlsx":
-        df.to_excel(filename, index=index)
-    elif ext == "feather":
-        df.to_feather(filename, index=index)
-    elif ext == "parquet":
-        df.to_parquet(filename, index=index)
-    elif ext in {"pkl", "pickle"}:
-        df.to_pickle(filename)
-    elif ext in {"hdf", "h5"}:
-        df.to_hdf(filename, key)
-    else:
+    try:
+        if ext == "csv":
+            df.to_csv(filename, index=index)
+        elif ext == "xlsx":
+            df.to_excel(filename, index=index)
+        elif ext == "feather":
+            df.to_feather(filename, index=index)
+        elif ext == "parquet":
+            df.to_parquet(filename, index=index)
+        elif ext in {"pkl", "pickle"}:
+            df.to_pickle(filename)
+        elif ext in {"hdf", "h5"}:
+            df.to_hdf(filename, key)
+        else:
+            click.secho(
+                f'unknown file extension for "{filename}", saving as csv',
+                fg="red",
+                bold=True,
+                err=True,
+            )
+            df.to_csv(filename, index=index)
+    except ModuleNotFoundError as exc:
+        csvf = str(filename) + ".csv"
         click.secho(
-            f'unknown file extension for "{filename}", saving as csv',
+            f"Can't save as {ext} ({exc}). Will save as *CSV* to this {csvf}",
+            err=True,
             fg="red",
             bold=True,
-            err=True,
         )
-        df.to_csv(filename, index=index)
+        df.to_csv(csvf, index=False)
 
 
 def read_df(
@@ -406,7 +434,7 @@ def read_df(
     elif ext in {"pkl", "pickle"}:
         return pd.read_pickle(filename)
     elif ext in {"hdf", "h5"}:
-        return pd.read_hdf(filename, key) # type: ignore
+        return pd.read_hdf(filename, key)  # type: ignore
 
     # if ext == "csv":
     return pd.read_csv(filename)
@@ -417,23 +445,34 @@ def toblastdb(blastdbs: Sequence[str]) -> list[str]:
     return sorted(s)
 
 
+def check_expr(headers: Sequence[str], expr: str):
+    df = pd.DataFrame({col: [] for col in headers})
+    df.eval(expr)
+
+
 def blastall(
     queryfasta: str,
     blastdbs: Sequence[str],
     best: int,
     with_seq: bool,
-    header: Sequence[str] | None = None,
     *,
     num_threads: int = 1,
+    blastp: bool = True,
+    header: Sequence[str] | None = None,
+    with_description: bool = False,
+    expr: str = EVALUE,
 ) -> pd.DataFrame:
-    df = fasta_to_df(queryfasta)
+    df = fasta_to_df(queryfasta, with_description=with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
             f'sequences IDs are not unique for query file "{queryfasta}"'
         )
     res = []
 
-    b6 = Blast6(header, num_threads=num_threads)
+    b6 = Blast6(header, num_threads=num_threads, blastp=blastp)
+
+    h = b6.header
+    check_expr(h, expr)
     for blastdb in blastdbs:
         rdf = b6.run(queryfasta, blastdb)
 
@@ -442,7 +481,7 @@ def blastall(
             sdf = fetch_seq_df(saccver, blastdb)
             rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
-        myrdf = find_best(rdf, df, nevalues=best)
+        myrdf = find_best(rdf, df, nevalues=best, evalue_col=expr)
         myrdf["blastdb"] = Path(blastdb).name
         res.append(myrdf)
     ddf = pd.concat(res, axis=0)
@@ -465,6 +504,8 @@ def buildall(
     fastafiles: Sequence[str],
     builddir: str | Path | None = None,
     merge: str | None = None,
+    *,
+    blastp: bool = True,
 ) -> None:
     if builddir is not None:
         builddir = Path(builddir)
@@ -482,7 +523,7 @@ def buildall(
             name, _ = name.split(".", maxsplit=1)
             name = name.lower()
             db = builddir / name if builddir else fa.parent / name
-            b = BlastDb(db)
+            b = BlastDb(db, blastp=blastp)
             ok = b.run(fa)
             if not ok:
                 raise click.ClickException(f"can't build database with {fastafile}")

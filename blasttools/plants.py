@@ -21,6 +21,9 @@ from .blastapi import (
     fetch_seq as fetch_seq_raw,
     find_best,
     remove_files,
+    EVALUE,
+    Blast6,
+    check_expr,
 )
 
 from .blastapi import BlastDb
@@ -42,7 +45,9 @@ class FileInfo:
 
 
 def find_fasta_names(plants: Sequence[str], release: int) -> Iterator[FileInfo]:
-    with ftplib.FTP(FTPURL) as ftp:
+    from .config import FTP_TIMEOUT
+
+    with ftplib.FTP(FTPURL, timeout=FTP_TIMEOUT) as ftp:
         ftp.login()
         for plant in plants:
             dname = PEP_DIR.format(release=release, plant=plant)
@@ -77,14 +82,15 @@ def fetch_fasta(
             filename,
         ]
     cmds.append(ENSEMBL.format(release=release, plant=plant, file=filename))
-    r = subprocess.run(
+    resp = subprocess.run(
         cmds,
         cwd=str(cwd),
         check=False,
     )
-    if r != 0:
+
+    if resp.returncode != 0:
         remove_files([cwd / filename])
-    return r
+    return resp
 
 
 def mkblast(plant: str, fastafile: str | Path, release: int) -> bool:
@@ -137,7 +143,9 @@ def fetch_seq_df(
 
 
 def find_species(release: int) -> list[str]:
-    with ftplib.FTP(FTPURL) as ftp:
+    from .config import FTP_TIMEOUT
+
+    with ftplib.FTP(FTPURL, timeout=FTP_TIMEOUT) as ftp:
         ftp.login()
         ftp.cwd(FASTAS_DIR.format(release=release))
         return list(ftp.nlst())
@@ -224,8 +232,10 @@ def blastall(
     *,
     path: str | None,
     num_threads: int = 1,
+    with_description: bool = True,
+    expr: str = EVALUE,
 ) -> pd.DataFrame:
-    df = fasta_to_df(queryfasta)
+    df = fasta_to_df(queryfasta, with_description=with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
             f'sequences IDs are not unique for query file "{queryfasta}"'
@@ -235,6 +245,9 @@ def blastall(
     ok = build(species, release, path=path)
     if not ok:
         raise click.ClickException("can't build blast databases(s)")
+    b6 = Blast6(header, num_threads=num_threads)
+
+    check_expr(b6.header, expr)
 
     for plant in species:
         rdf = doblast(
@@ -251,7 +264,8 @@ def blastall(
             sdf = fetch_seq_df(saccver, plant, release, path=path)
             rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
-        myrdf = find_best(rdf, df, nevalues=best)
+        myrdf = find_best(rdf, df, nevalues=best, evalue_col=expr)
+
         myrdf["species"] = plant
         res.append(myrdf)
     ddf = pd.concat(res, axis=0)
