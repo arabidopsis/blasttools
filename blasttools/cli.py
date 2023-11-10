@@ -143,12 +143,11 @@ def blast_cmd(
     if columns is not None:
         if xml:
             raise click.BadParameter(
-                'can\'t have "--columns" with "--xml"',
+                'Can\'t have "--columns" with "--xml"',
                 param_hint="xml",
             )
         myheader = mkheader(columns)
-    if xml and expr == EVALUE:
-        expr = "hsp_expect"
+
     config = BlastConfig(
         best=best,
         with_seq=with_seq,

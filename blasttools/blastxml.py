@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess
 from collections.abc import Sequence
 from dataclasses import asdict
@@ -76,37 +77,15 @@ def out5_to_df(xmlfile: str) -> pd.DataFrame:
     return pd.DataFrame([asdict(hit) for hit in hits(run())])
 
 
-# @dataclass
-# class XHit:
-#     queryid: str  # full string from fasta description line
-#     query_length: int
-#     accession: str
-#     accession_length: int  # accession length
-#     align_length: int
-#     bits: float
-#     score: float
-#     expect: float
-#     identities: int
-#     positives: int
-#     gaps: int
-#     match: str
-#     query: str
-#     query_start: int
-#     query_end: int
-#     sbjct: str
-#     sbjct_start: int
-#     sbjct_end: int
-
-
-# XHEADER = [f.name for f in fields(XHit)]
+GAPS = re.compile("[-]+")
 
 
 @dataclass
 class Hit:
-    qaccver: str  # full string from fasta description line
+    qaccver: str
     qlen: int
     saccver: str
-    slen: int  # accession length
+    slen: int
     length: int
     bitscore: float
     score: float
@@ -121,14 +100,9 @@ class Hit:
     sbjct: str
     sstart: int
     send: int
-
-    @property
-    def mismatch(self) -> int:
-        return self.length - self.nident - self.gaps
-
-    @property
-    def pident(self) -> float:
-        return self.nident * 100.0 / self.length
+    gapopen: int
+    mismatch: int
+    pident: float
 
 
 HEADER = [f.name for f in fields(Hit)]
@@ -144,31 +118,19 @@ def unwind(xml: Iterator[Blast]) -> Iterator[tuple[Blast, Alignment, HSP]]:
                 yield b, a, h
 
 
-# def xhits(xml: Iterator[Blast], full: bool = False) -> Iterator[XHit]:
-#     for b, a, h in unwind(xml):
-#         # b.query is the full line in the query fasta
-#         # actually <query-def>
-#         queryid = b.query.split(None, 1)[0] if not full else b.query
-#         yield XHit(
-#             queryid=queryid,
-#             query_length=b.query_length,
-#             accession=a.accession,  # saccver
-#             accession_length=a.length,
-#             align_length=h.align_length,  # alignment length
-#             bits=h.bits,  # bitscore
-#             score=h.score,  # bitscore?
-#             expect=h.expect,  # evalue
-#             identities=h.identities,
-#             gaps=h.gaps,
-#             positives=h.positives,
-#             match=h.match,
-#             query=h.query,
-#             query_start=h.query_start,  # qstart
-#             query_end=h.query_end,  # qend
-#             sbjct=h.sbjct,
-#             sbjct_start=h.sbjct_start,  # sstart
-#             sbjct_end=h.sbjct_end,  # send
-#         )
+def mismatch(hsp: HSP) -> int:
+    return hsp.align_length - hsp.identities - hsp.gaps
+
+
+def pident(hsp: HSP) -> float:
+    return hsp.identities * 100.0 / hsp.align_length
+
+
+def gapopen(hsp: HSP) -> int:
+    # sbjct.str.count("[-]+") + query.count("[-]+")
+    return sum(1 for _ in (GAPS.finditer(hsp.sbjct))) + sum(
+        1 for _ in (GAPS.finditer(hsp.query))
+    )
 
 
 def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
@@ -179,78 +141,29 @@ def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
         yield Hit(
             qaccver=queryid,
             qlen=b.query_length,
-            saccver=a.accession,  # saccver
+            saccver=a.accession,
             slen=a.length,
             length=h.align_length,  # alignment length
-            bitscore=h.bits,  # bitscore
-            score=h.score,  # bitscore?
-            evalue=h.expect,  # evalue
+            bitscore=h.bits,
+            score=h.score,
+            evalue=h.expect,
             nident=h.identities,
             gaps=h.gaps,
             positive=h.positives,
-            match=h.match,
-            query=h.query,
-            qstart=h.query_start,  # qstart
-            qend=h.query_end,  # qend
-            sbjct=h.sbjct,
-            sstart=h.sbjct_start,  # sstart
-            send=h.sbjct_end,  # send
+            match=h.match,  # not in --format=6
+            query=h.query,  # not in --format=6
+            qstart=h.query_start,
+            qend=h.query_end,
+            sbjct=h.sbjct,  # not in --format=6
+            sstart=h.sbjct_start,
+            send=h.sbjct_end,
+            gapopen=gapopen(h),
+            mismatch=mismatch(h),
+            pident=pident(h),
         )
 
 
-# def xhsp_match(hsp: HSP, width: int = 50, right: int = 0) -> str:
-#     lines = [
-#         f"Score {hsp.score:.0f} ({hsp.bits:.0f} bits), expectation {hsp.expect:.1e},"
-#         f" alignment length {hsp.align_length}",
-#     ]
-#     if width <= 0:
-#         width = hsp.align_length
-#     if hsp.align_length <= width:
-#         lines.append(
-#             f"Query:{str(hsp.query_start).rjust(8)} {hsp.query} {hsp.query_end}",
-#         )
-#         lines.append(f"               {hsp.match}")
-#         lines.append(
-#             f"Sbjct:{str(hsp.sbjct_start).rjust(8)} {hsp.sbjct} {hsp.sbjct_end}",
-#         )
-#     elif right <= 0:
-#         query_end = hsp.query_start
-#         sbjct_end = hsp.sbjct_start
-#         for q in range(0, hsp.align_length, width):
-#             query = hsp.query[q : q + width]
-#             sbjct = hsp.sbjct[q : q + width]
-
-#             s = " " * (width - len(query))
-
-#             query_start = query_end
-#             sbjct_start = sbjct_end
-#             query_end += len(query) - query.count("-")
-#             sbjct_end += len(sbjct) - sbjct.count("-")
-#             lines.append(
-#                 f"Query:{str(query_start).rjust(8)} {query}{s} {query_end - 1}",
-#             )
-#             lines.append(f"{' '*15}{hsp.match[q:q+width]}")
-#             lines.append(
-#                 f"Sbjct:{str(sbjct_start).rjust(8)} {sbjct}{s} {sbjct_end - 1}",
-#             )
-#             lines.append("")
-#         del lines[-1]
-#     else:
-#         left = width - right - 3 + 1
-
-#         lines.append(
-#             f"Query:{str(hsp.query_start).rjust(8)} {hsp.query[:left]}...{hsp.query[-right:]} {hsp.query_end}",
-#         )
-#         lines.append(f"               {hsp.match[:left]}...{hsp.match[-right:]}")
-#         lines.append(
-#             f"Sbjct:{str(hsp.sbjct_start).rjust(8)} {hsp.sbjct[:left]}...{hsp.sbjct[-right:]} {hsp.sbjct_end}",
-#         )
-#     return "\n".join(lines)
-
-
-# df.apply(hsp_match, axis=1)
-
-
+# this will work with df.apply(hsp_match, axis=1)
 def hsp_match(hsp: Hit, width: int = 50, right: int = 0) -> str:
     lines = [
         f"Score {hsp.score:.0f} ({hsp.bitscore:.0f} bits), expectation {hsp.evalue:.1e},"
@@ -311,6 +224,7 @@ def blastxml_to_df(
     return pd.DataFrame([asdict(hit) for hit in hits(bs.runner(queryfasta, blastdb))])
 
 
+# seem to have --columns='+score gaps nident positive qlen slen'
 def blastall(
     queryfasta: str,
     blastdbs: Sequence[str],

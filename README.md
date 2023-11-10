@@ -78,4 +78,12 @@ Usually if you want the top/best `--best=3` will select the _lowest_ evalue's fo
 each query sequence. However if you want say the best to, say, be the longest query match
 then you can add `--expr='qstart - qend'`. (Remember we are looking for the lowest values).
 
-If you are using `--xml` output the `--expr='hsp_quesy_start - hsp_query_end'`
+## XML
+
+Blast offers an xml (`--xml`) output format that adds `query`, `match`, `sbjct` strings. The other
+fields are equivalent to adding `--columns='+score gaps nident positive qlen slen'`.
+
+```python
+from blasttools.blastxml import hsp_match
+df['display'] = df.apply(hsp_match, axis=1)
+```
