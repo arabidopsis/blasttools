@@ -6,7 +6,7 @@ from typing import Any
 
 import click
 import pandas as pd
-from .blastapi import fasta_to_df, read_fasta, save_df
+from .blastapi import fasta_to_df, read_fasta, save_df, test_save, check_ext
 from .cli import blast
 
 
@@ -43,6 +43,9 @@ def exact(query: str, subjects: Sequence[str]) -> pd.DataFrame:
 @click.argument("fastas", nargs=-1)
 def exact_cmd(query: str, fastas: Sequence[str], out: str | None) -> None:
     "Try and match sequences exactly"
+    if out is not None:
+        check_ext(out)
+        test_save(out)
     df = exact(query, fastas)
     if out is None:
         out = query + ".csv"

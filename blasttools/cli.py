@@ -12,6 +12,7 @@ from .blastapi import (
     read_df,
     EVALUE,
     BlastConfig,
+    test_save,
 )
 
 
@@ -114,7 +115,8 @@ def blast_cmd(
     from .blastxml import blastall as blastall5
 
     if out is not None:
-        check_ext(out)
+        check_ext(out)  # fail early
+        test_save(out)
 
     if len(blastdbs) == 0:
         return
@@ -183,6 +185,7 @@ def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
 
     if out is not None:
         check_ext(out)
+        test_save(out)
 
     dfs = []
     for df in dataframes:

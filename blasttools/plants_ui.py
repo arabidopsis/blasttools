@@ -14,7 +14,7 @@ from .plants import (
 )
 
 from .cli import blast
-from .blastapi import save_df, mkheader
+from .blastapi import save_df, mkheader, test_save
 
 
 @dataclass
@@ -123,6 +123,7 @@ def blast_cmd(
         return
     if out is not None:
         check_ext(out)
+        test_save(out)
 
     myheader = None
     if columns is not None:

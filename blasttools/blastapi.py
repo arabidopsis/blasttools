@@ -5,7 +5,6 @@ from typing import Iterator, Sequence
 from functools import cache
 import gzip
 import os
-from io import BytesIO
 
 import subprocess
 from shutil import which
@@ -378,39 +377,69 @@ def check_ext(filename: str) -> None:
     )
 
 
+def try_save(
+    ext: str,
+    df: pd.DataFrame,
+    filename: str | Path,
+    index: bool = False,
+    key: str = "blast",
+) -> bool:
+    if ext == "csv":
+        df.to_csv(filename, index=index)
+    elif ext == "xlsx":
+        df.to_excel(filename, index=index)
+    elif ext == "feather":
+        df.to_feather(filename, index=index)
+    elif ext == "parquet":
+        df.to_parquet(filename, index=index)
+    elif ext in {"pkl", "pickle"}:
+        df.to_pickle(filename)
+    elif ext in {"hdf", "h5"}:
+        df.to_hdf(filename, key)
+    else:
+        return False
+    return True
+
+
+def test_save(filename: str | Path):
+    import tempfile
+
+    ext = get_ext(Path(filename))
+    if ext is None:
+        return  # CSV
+    df = pd.DataFrame(dict(x=[1]))
+    with tempfile.NamedTemporaryFile(suffix="." + ext) as fp:
+        try:
+            try_save(ext, df, fp.name)
+        except ModuleNotFoundError as exc:
+            raise click.ClickException(
+                f"Can't save DataFrame as {filename} ({exc})"
+            ) from exc
+
+
 def save_df(
     df: pd.DataFrame,
     filename: str | Path,
     index: bool = False,
     default: str = "csv",
     key: str = "blast",
-    io: BytesIO | None = None,
 ) -> None:
     filename = Path(filename)
     ext = get_ext(filename)
     if ext is None:
         ext = default
     try:
-        if ext == "csv":
-            df.to_csv(filename, index=index)
-        elif ext == "xlsx":
-            df.to_excel(filename, index=index)
-        elif ext == "feather":
-            df.to_feather(filename, index=index)
-        elif ext == "parquet":
-            df.to_parquet(filename, index=index)
-        elif ext in {"pkl", "pickle"}:
-            df.to_pickle(filename)
-        elif ext in {"hdf", "h5"}:
-            df.to_hdf(filename, key)
-        else:
-            click.secho(
-                f'unknown file extension for "{filename}", saving as csv',
-                fg="red",
-                bold=True,
-                err=True,
-            )
-            df.to_csv(filename, index=index)
+        ok = try_save(ext, df, filename, index, key)
+        if ok:
+            return
+
+        click.secho(
+            f'unknown file extension for "{filename}", saving as csv',
+            fg="red",
+            bold=True,
+            err=True,
+        )
+        df.to_csv(filename, index=index)
     except ModuleNotFoundError as exc:
         csvf = str(filename) + ".csv"
         msg1 = click.style(
