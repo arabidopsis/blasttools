@@ -1,5 +1,7 @@
 # valid columns for -outfmt 6
 # taken from `blastp -help` output
+from __future__ import annotations
+
 VALID = {
     "qseqid": "Query Seq-id",
     "qgi": "Query GI",

@@ -1,19 +1,19 @@
 from __future__ import annotations
+
 from collections.abc import Sequence
+
 import click
 
-from .blastapi import (
-    merge_fasta,
-    buildall,
-    blastall,
-    save_df,
-    toblastdb,
-    check_ext,
-    read_df,
-    EVALUE,
-    BlastConfig,
-    test_save,
-)
+from .blastapi import blastall
+from .blastapi import BlastConfig
+from .blastapi import buildall
+from .blastapi import check_ext
+from .blastapi import EVALUE
+from .blastapi import merge_fasta
+from .blastapi import read_df
+from .blastapi import save_df
+from .blastapi import test_save
+from .blastapi import toblastdb
 
 
 @click.group(
@@ -62,10 +62,15 @@ def merge_fasta_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
     help="merge all fastafiles into one (and create one blast database)",
 )
 @click.argument(
-    "fastas", nargs=-1, type=click.Path(exists=True, file_okay=True, dir_okay=False)
+    "fastas",
+    nargs=-1,
+    type=click.Path(exists=True, file_okay=True, dir_okay=False),
 )
 def build_cmd(
-    fastas: Sequence[str], builddir: str | None, merge: str | None, nucl: bool
+    fastas: Sequence[str],
+    builddir: str | None,
+    merge: str | None,
+    nucl: bool,
 ) -> None:
     """Build blast databases from fasta files"""
     buildall(fastas, builddir=builddir, merge=merge, blastp=not nucl)
@@ -78,17 +83,25 @@ def build_cmd(
     type=click.Path(dir_okay=False),
 )
 @click.option(
-    "-d", "--with-description", is_flag=True, help="include query description"
+    "-d",
+    "--with-description",
+    is_flag=True,
+    help="include query description",
 )
 @click.option(
-    "--best", default=0, help="best (lowest) evalues [=0 take all] (see also --expr)"
+    "--best",
+    default=0,
+    help="best (lowest) evalues [=0 take all] (see also --expr)",
 )
 @click.option("--xml", is_flag=True, help="run with xml output")
 @click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option("-t", "--num-threads", help="number of threads to use", default=1)
 @click.option(
-    "--expr", help="expression to minimize", default=EVALUE, show_default=True
+    "--expr",
+    help="expression to minimize",
+    default=EVALUE,
+    show_default=True,
 )
 @click.option(
     "-c",
@@ -130,7 +143,8 @@ def blast_cmd(
     if columns is not None:
         if xml:
             raise click.BadParameter(
-                'can\'t have "--columns" with "--xml"', param_hint="xml"
+                'can\'t have "--columns" with "--xml"',
+                param_hint="xml",
             )
         myheader = mkheader(columns)
     if xml and expr == EVALUE:
@@ -167,7 +181,8 @@ def columns_cmd() -> None:
         click.echo(f"{k:<{mx}}{s}: {v}")
     click.echo()
     click.secho(
-        "'*' means default. See `blastp -help` form more information.", fg="yellow"
+        "'*' means default. See `blastp -help` form more information.",
+        fg="yellow",
     )
 
 

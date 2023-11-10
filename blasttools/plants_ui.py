@@ -1,20 +1,22 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Sequence
+
 import click
-from .config import RELEASE
-from .blastapi import EVALUE, BlastConfig
 
-from .plants import (
-    build,
-    blastall,
-    fetch_fastas,
-    find_fasta_names,
-    find_species,
-)
-
+from .blastapi import BlastConfig
+from .blastapi import EVALUE
+from .blastapi import mkheader
+from .blastapi import save_df
+from .blastapi import test_save
 from .cli import blast
-from .blastapi import save_df, mkheader, test_save
+from .config import RELEASE
+from .plants import blastall
+from .plants import build
+from .plants import fetch_fastas
+from .plants import find_fasta_names
+from .plants import find_species
 
 
 @dataclass
@@ -27,7 +29,11 @@ pass_config = click.make_pass_decorator(Config, ensure=True)
 
 @blast.group(help=click.style("blast commands that understand Ensembl", fg="magenta"))
 @click.option(
-    "-r", "--release", default=RELEASE, show_default=True, help="release number"
+    "-r",
+    "--release",
+    default=RELEASE,
+    show_default=True,
+    help="release number",
 )
 @click.pass_context
 def plants(ctx: click.Context, release: int) -> None:
@@ -64,17 +70,28 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     type=click.Path(dir_okay=False),
 )
 @click.option(
-    "--best", default=0, help="best (lowest) evalues [=0 take all]  (see also --expr)"
+    "--best",
+    default=0,
+    help="best (lowest) evalues [=0 take all]  (see also --expr)",
 )
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option(
-    "-n", "--names", is_flag=True, help="use descriptive column names in output"
+    "-n",
+    "--names",
+    is_flag=True,
+    help="use descriptive column names in output",
 )
 @click.option(
-    "-d", "--with-description", is_flag=True, help="include query description"
+    "-d",
+    "--with-description",
+    is_flag=True,
+    help="include query description",
 )
 @click.option(
-    "--expr", help="expression to minimize", default=EVALUE, show_default=True
+    "--expr",
+    help="expression to minimize",
+    default=EVALUE,
+    show_default=True,
 )
 @click.option(
     "-c",
@@ -172,7 +189,9 @@ def fasta_filenames(cfg: Config, species: Sequence[str], full: bool) -> None:
         else:
             if full:
                 fasta = ENSEMBL.format(
-                    release=cfg.release, plant=info.species, file=info.fasta
+                    release=cfg.release,
+                    plant=info.species,
+                    file=info.fasta,
                 )
                 click.secho(f"{info.species}: {fasta}")
             else:

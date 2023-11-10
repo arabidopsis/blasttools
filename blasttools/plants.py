@@ -2,32 +2,28 @@
 # or asia https://asia.ensembl.org/info/data/ftp/index.html
 from __future__ import annotations
 
-from typing import Iterator, Sequence
-from dataclasses import dataclass
 import ftplib
 import glob
 import subprocess
-from shutil import which
-
+from dataclasses import dataclass
 from pathlib import Path
+from shutil import which
+from typing import Iterator
+from typing import Sequence
 
 import click
 import pandas as pd
 
-from .blastapi import (
-    safe_which,
-    fasta_to_df,
-    doblast6,
-    fetch_seq as fetch_seq_raw,
-    find_best,
-    remove_files,
-    EVALUE,
-    Blast6,
-    check_expr,
-    BlastConfig,
-)
-
+from .blastapi import Blast6
+from .blastapi import BlastConfig
 from .blastapi import BlastDb
+from .blastapi import check_expr
+from .blastapi import doblast6
+from .blastapi import fasta_to_df
+from .blastapi import fetch_seq as fetch_seq_raw
+from .blastapi import find_best
+from .blastapi import remove_files
+from .blastapi import safe_which
 
 FASTAS_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/"
 PEP_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/{plant}/pep"
@@ -61,7 +57,11 @@ def find_fasta_names(plants: Sequence[str], release: int) -> Iterator[FileInfo]:
 
 
 def fetch_fasta(
-    plant: str, filename: str, release: int, *, quiet: bool = False
+    plant: str,
+    filename: str,
+    release: int,
+    *,
+    quiet: bool = False,
 ) -> subprocess.CompletedProcess[bytes]:
     cwd = blast_dir(release)
     wget = which("wget")
@@ -115,7 +115,10 @@ def doblast(
         blastdir = Path(path) / blastdir
 
     return doblast6(
-        queryfasta, str(blastdir / plant), header=header, num_threads=num_threads
+        queryfasta,
+        str(blastdir / plant),
+        header=header,
+        num_threads=num_threads,
     )
 
 
@@ -128,7 +131,11 @@ def has_fasta(blastdir: Path, filename: str) -> bool:
 
 
 def fetch_seq_df(
-    seqids: Sequence[str], plant: str, release: int, *, path: str | None
+    seqids: Sequence[str],
+    plant: str,
+    release: int,
+    *,
+    path: str | None,
 ) -> pd.DataFrame:
     blastdir = blast_dir(release)
     if path is not None:
@@ -139,7 +146,7 @@ def fetch_seq_df(
         [
             {"saccver": rec.id, "subject_seq": str(rec.seq)}
             for rec in fetch_seq_raw(seqids, blastdb)
-        ]
+        ],
     )
 
 
@@ -234,7 +241,7 @@ def blastall(
     df = fasta_to_df(queryfasta, with_description=config.with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
-            f'sequences IDs are not unique for query file "{queryfasta}"'
+            f'sequences IDs are not unique for query file "{queryfasta}"',
         )
     res = []
 

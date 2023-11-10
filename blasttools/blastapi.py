@@ -1,23 +1,22 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Iterator, Sequence
-from functools import cache
 import gzip
 import os
-
 import subprocess
-from shutil import which
+from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
+from shutil import which
+from typing import Iterator
+from typing import Sequence
 from uuid import uuid4
 
 import click
 import pandas as pd
-from pandas.errors import UndefinedVariableError
-
 from Bio import SeqIO  # type: ignore
-from Bio.SeqRecord import SeqRecord  # type: ignore
 from Bio.Seq import Seq  # type: ignore
+from Bio.SeqRecord import SeqRecord  # type: ignore
+from pandas.errors import UndefinedVariableError
 
 
 @cache
@@ -33,7 +32,7 @@ def read_fasta(path: str) -> Iterator[SeqRecord]:
         with gzip.open(path, "rt") as fp:
             yield from SeqIO.parse(fp, "fasta")
     else:
-        with open(path, "rt", encoding="utf-8") as fp:
+        with open(path, encoding="utf-8") as fp:
             yield from SeqIO.parse(fp, "fasta")
 
 
@@ -72,7 +71,9 @@ class BlastDb:
             cmd = [safe_which("cat"), fastafile.name]
         # -parse_seqids so that we can get sequences out from ids with blastdbcmd
         with subprocess.Popen(
-            cmd, stdout=subprocess.PIPE, cwd=str(fastafile.parent)
+            cmd,
+            stdout=subprocess.PIPE,
+            cwd=str(fastafile.parent),
         ) as p1:
             with subprocess.Popen(
                 [
@@ -223,7 +224,7 @@ def write_fasta(df: pd.DataFrame, filename: str) -> None:
             for row in r.itertuples():
                 SeqIO.write(toseq(row), fp, format="fasta")
     else:
-        with open(filename, "wt", encoding="utf-8") as fp:
+        with open(filename, "w", encoding="utf-8") as fp:
             for row in r.itertuples():
                 SeqIO.write(toseq(row), fp, format="fasta")
 
@@ -242,7 +243,7 @@ def fetch_seq(seqids: Sequence[str], blastdb: str) -> Iterator[SeqRecord]:
     seqfile = f"{u}.seq"
     out = f"{u}.fasta"
     try:
-        with open(seqfile, "wt", encoding="utf-8") as fp:
+        with open(seqfile, "w", encoding="utf-8") as fp:
             for seq in seqids:
                 print(seq, file=fp)
         r = subprocess.run(
@@ -251,14 +252,17 @@ def fetch_seq(seqids: Sequence[str], blastdb: str) -> Iterator[SeqRecord]:
         )
         if r.returncode:
             raise click.ClickException("Can't fetch sequences")
-        with open(out, "rt", encoding="utf-8") as fp:
+        with open(out, encoding="utf-8") as fp:
             yield from SeqIO.parse(fp, "fasta")
     finally:
         remove_files([seqfile, out])
 
 
 def merge_fasta(
-    fasta1: str, fasta2: str, out: str, with_description: bool = True
+    fasta1: str,
+    fasta2: str,
+    out: str,
+    with_description: bool = True,
 ) -> None:
     df1 = fasta_to_df(fasta1, with_description=with_description)
     df2 = fasta_to_df(fasta2, with_description=with_description)
@@ -268,7 +272,12 @@ def merge_fasta(
 
     FILLNA = "x"
     df = pd.merge(
-        df1, df2, how="outer", left_on="seq", right_on="seq", suffixes=("_1", "_2")
+        df1,
+        df2,
+        how="outer",
+        left_on="seq",
+        right_on="seq",
+        suffixes=("_1", "_2"),
     )
     df = df.fillna(FILLNA)
 
@@ -312,7 +321,7 @@ def find_best(
 ) -> pd.DataFrame:
     if evalue_col not in blast_df:
         blast_df[TMP_EVAL_COL] = blast_df.eval(
-            evalue_col
+            evalue_col,
         )  # expression like 'qstart - qend'
         evalue_col = TMP_EVAL_COL
     if nevalues > 0:
@@ -322,7 +331,8 @@ def find_best(
             .reset_index(level=0)
         )
         myrdf = blast_df.loc[r.index].sort_values(
-            [query_col, evalue_col], ascending=[True, True]
+            [query_col, evalue_col],
+            ascending=[True, True],
         )
     else:
         myrdf = blast_df.sort_values([query_col, evalue_col], ascending=[True, True])
@@ -339,7 +349,7 @@ def fetch_seq_df(seqids: Sequence[str], database: str) -> pd.DataFrame:
         [
             {"saccver": rec.id, "subject_seq": str(rec.seq)}
             for rec in fetch_seq(seqids, database)
-        ]
+        ],
     )
 
 
@@ -373,7 +383,7 @@ def check_ext(filename: str) -> None:
         return
     ex = ",".join(OKEXT)
     raise click.ClickException(
-        f'unknown output type for file: "{filename}": require extension to be one of .{{{ex}}}'
+        f'unknown output type for file: "{filename}": require extension to be one of .{{{ex}}}',
     )
 
 
@@ -413,7 +423,7 @@ def test_save(filename: str | Path):
             try_save(ext, df, fp.name)
         except ModuleNotFoundError as exc:
             raise click.ClickException(
-                f"Can't save DataFrame as {filename} ({exc})"
+                f"Can't save DataFrame as {filename} ({exc})",
             ) from exc
 
 
@@ -443,7 +453,9 @@ def save_df(
     except ModuleNotFoundError as exc:
         csvf = str(filename) + ".csv"
         msg1 = click.style(
-            f"Can't save as file type: {ext} ({exc}).", fg="red", bold=True
+            f"Can't save as file type: {ext} ({exc}).",
+            fg="red",
+            bold=True,
         )
         msg2 = click.style(f'Will save as *CSV* to "{csvf}".', fg="green", bold=True)
         click.echo(
@@ -508,12 +520,15 @@ class BlastConfig:
 
 
 def blastall(
-    queryfasta: str, blastdbs: Sequence[str], *, config: BlastConfig = BlastConfig()
+    queryfasta: str,
+    blastdbs: Sequence[str],
+    *,
+    config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame:
     df = fasta_to_df(queryfasta, with_description=config.with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
-            f'sequences IDs are not unique for query file "{queryfasta}"'
+            f'sequences IDs are not unique for query file "{queryfasta}"',
         )
     res = []
 
@@ -540,7 +555,7 @@ def concat_fasta(fastafiles: Sequence[str], out: str) -> None:
     if out.endswith(".gz"):
         of = gzip.open(out, "wt")
     else:
-        of = open(out, "wt", encoding="utf-8")
+        of = open(out, "w", encoding="utf-8")
     with of:
         for fa in fastafiles:
             for rec in read_fasta(fa):

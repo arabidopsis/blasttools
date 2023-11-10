@@ -1,25 +1,28 @@
 from __future__ import annotations
 
-from pathlib import Path
 import subprocess
-from typing import Iterator
 from collections.abc import Sequence
-
-from dataclasses import dataclass, asdict, fields
+from dataclasses import asdict
+from dataclasses import dataclass
+from dataclasses import fields
+from pathlib import Path
+from typing import Iterator
 from uuid import uuid4
-import pandas as pd
+
 import click
+import pandas as pd
 from Bio.Blast.NCBIXML import parse  # type: ignore
-from Bio.Blast.Record import Blast, Alignment, HSP  # type: ignore
-from .blastapi import (
-    safe_which,
-    remove_files,
-    fasta_to_df,
-    find_best,
-    fetch_seq_df,
-    check_expr,
-    BlastConfig,
-)
+from Bio.Blast.Record import Alignment
+from Bio.Blast.Record import Blast
+from Bio.Blast.Record import HSP
+
+from .blastapi import BlastConfig
+from .blastapi import check_expr
+from .blastapi import fasta_to_df
+from .blastapi import fetch_seq_df
+from .blastapi import find_best
+from .blastapi import remove_files
+from .blastapi import safe_which
 
 
 class BlastXML:
@@ -54,20 +57,20 @@ class BlastXML:
             )
             if r.returncode:
                 raise click.ClickException(f"Can't blast {queryfasta}")
-            with open(out, "rt", encoding="utf-8") as fp:
+            with open(out, encoding="utf-8") as fp:
                 yield from parse(fp)
         finally:
             remove_files([out])
 
     def run(self, queryfasta: str, blastdb: str) -> pd.DataFrame:
         return pd.DataFrame(
-            [asdict(hit) for hit in hits(self.runner(queryfasta, blastdb))]
+            [asdict(hit) for hit in hits(self.runner(queryfasta, blastdb))],
         )
 
 
 def out5_to_df(xmlfile: str) -> pd.DataFrame:
     def run() -> Iterator[Blast]:
-        with open(xmlfile, "rt", encoding="utf-8") as fp:
+        with open(xmlfile, encoding="utf-8") as fp:
             yield from parse(fp)
 
     return pd.DataFrame([asdict(hit) for hit in hits(run())])
@@ -138,17 +141,17 @@ def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
 def hsp_match(hsp: HSP, width: int = 50, right: int = 0) -> str:
     lines = [
         f"Score {hsp.score:.0f} ({hsp.bits:.0f} bits), expectation {hsp.expect:.1e},"
-        f" alignment length {hsp.align_length}"
+        f" alignment length {hsp.align_length}",
     ]
     if width <= 0:
         width = hsp.align_length
     if hsp.align_length <= width:
         lines.append(
-            f"Query:{str(hsp.query_start).rjust(8)} {hsp.query} {hsp.query_end}"
+            f"Query:{str(hsp.query_start).rjust(8)} {hsp.query} {hsp.query_end}",
         )
         lines.append(f"               {hsp.match}")
         lines.append(
-            f"Sbjct:{str(hsp.sbjct_start).rjust(8)} {hsp.sbjct} {hsp.sbjct_end}"
+            f"Sbjct:{str(hsp.sbjct_start).rjust(8)} {hsp.sbjct} {hsp.sbjct_end}",
         )
     elif right <= 0:
         query_end = hsp.query_start
@@ -164,11 +167,11 @@ def hsp_match(hsp: HSP, width: int = 50, right: int = 0) -> str:
             query_end += len(query) - query.count("-")
             sbjct_end += len(sbjct) - sbjct.count("-")
             lines.append(
-                f"Query:{str(query_start).rjust(8)} {query}{s} {query_end - 1}"
+                f"Query:{str(query_start).rjust(8)} {query}{s} {query_end - 1}",
             )
             lines.append(f"{' '*15}{hsp.match[q:q+width]}")
             lines.append(
-                f"Sbjct:{str(sbjct_start).rjust(8)} {sbjct}{s} {sbjct_end - 1}"
+                f"Sbjct:{str(sbjct_start).rjust(8)} {sbjct}{s} {sbjct_end - 1}",
             )
             lines.append("")
         del lines[-1]
@@ -176,31 +179,37 @@ def hsp_match(hsp: HSP, width: int = 50, right: int = 0) -> str:
         left = width - right - 3 + 1
 
         lines.append(
-            f"Query:{str(hsp.query_start).rjust(8)} {hsp.query[:left]}...{hsp.query[-right:]} {hsp.query_end}"
+            f"Query:{str(hsp.query_start).rjust(8)} {hsp.query[:left]}...{hsp.query[-right:]} {hsp.query_end}",
         )
         lines.append(f"               {hsp.match[:left]}...{hsp.match[-right:]}")
         lines.append(
-            f"Sbjct:{str(hsp.sbjct_start).rjust(8)} {hsp.sbjct[:left]}...{hsp.sbjct[-right:]} {hsp.sbjct_end}"
+            f"Sbjct:{str(hsp.sbjct_start).rjust(8)} {hsp.sbjct[:left]}...{hsp.sbjct[-right:]} {hsp.sbjct_end}",
         )
     return "\n".join(lines)
 
 
 def blastxml_to_df(
-    queryfasta: str, blastdb: str, num_threads: int = 1, blastp: bool = True
+    queryfasta: str,
+    blastdb: str,
+    num_threads: int = 1,
+    blastp: bool = True,
 ) -> pd.DataFrame:
     bs = BlastXML(num_threads=num_threads, blastp=blastp)
     return pd.DataFrame([asdict(hit) for hit in hits(bs.runner(queryfasta, blastdb))])
 
 
 def blastall(
-    queryfasta: str, blastdbs: Sequence[str], *, config: BlastConfig = BlastConfig()
+    queryfasta: str,
+    blastdbs: Sequence[str],
+    *,
+    config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame:
     if config.expr not in HEADER:
         check_expr(HEADER, config.expr)  # fail early
     df = fasta_to_df(queryfasta, with_description=config.with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
-            f'sequences IDs are not unique for query file "{queryfasta}"'
+            f'sequences IDs are not unique for query file "{queryfasta}"',
         )
     res = []
 
@@ -215,7 +224,11 @@ def blastall(
             rdf = pd.merge(rdf, sdf, left_on="accession", right_on="accession")
 
         myrdf = find_best(
-            rdf, df, nevalues=config.best, evalue_col=config.expr, query_col="query"
+            rdf,
+            df,
+            nevalues=config.best,
+            evalue_col=config.expr,
+            query_col="query",
         )
         myrdf["blastdb"] = Path(blastdb).name
         res.append(myrdf)

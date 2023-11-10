@@ -1,12 +1,17 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from collections import defaultdict
+from collections.abc import Sequence
 from typing import Any
 
 import click
 import pandas as pd
-from .blastapi import fasta_to_df, read_fasta, save_df, test_save, check_ext
+
+from .blastapi import check_ext
+from .blastapi import fasta_to_df
+from .blastapi import read_fasta
+from .blastapi import save_df
+from .blastapi import test_save
 from .cli import blast
 
 
