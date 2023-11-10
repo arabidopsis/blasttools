@@ -215,3 +215,14 @@ def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
         save_df(odf, out)
     else:
         odf.to_csv(sys.stdout, index=False)
+
+
+@blast.command(name="split-fasta")
+@click.option("--fmt", help="format of filenames")
+@click.argument("fastafile", type=click.Path(dir_okay=False, exists=True))
+@click.argument("batch", type=int)
+def split_cmd(fastafile: str, batch: int, fmt: str | None) -> None:
+    """split a fasta file into batches"""
+    from .utils import split_fasta
+
+    split_fasta(fastafile, batch, target_dir=".", fmt=fmt)

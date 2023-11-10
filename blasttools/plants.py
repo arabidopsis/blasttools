@@ -18,7 +18,6 @@ from .blastapi import Blast6
 from .blastapi import BlastConfig
 from .blastapi import BlastDb
 from .blastapi import check_expr
-from .blastapi import doblast6
 from .blastapi import fasta_to_df
 from .blastapi import fetch_seq as fetch_seq_raw
 from .blastapi import find_best
@@ -26,9 +25,11 @@ from .blastapi import remove_files
 from .blastapi import safe_which
 
 FASTAS_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/"
-PEP_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/{plant}/pep"
+TOP = "ensemblgenomes/pub/release-{release}/plants/"
+PEP_DIR = TOP + "fasta/{plant}/pep"
 FTPURL = "ftp.ebi.ac.uk"
 ENSEMBL = f"ftp://{FTPURL}/" + PEP_DIR + "/{file}"
+SPECIES_TSV = "species_EnsemblPlants.txt"
 
 
 def blast_dir(release: int) -> Path:
@@ -56,14 +57,7 @@ def find_fasta_names(plants: Sequence[str], release: int) -> Iterator[FileInfo]:
                 yield FileInfo(plant, None)
 
 
-def fetch_fasta(
-    plant: str,
-    filename: str,
-    release: int,
-    *,
-    quiet: bool = False,
-) -> subprocess.CompletedProcess[bytes]:
-    cwd = blast_dir(release)
+def _wgetcmd(filename: str, quiet: bool) -> list[str]:
     wget = which("wget")
     if wget is not None:
         q = ["-q"] if quiet else []
@@ -82,7 +76,33 @@ def fetch_fasta(
             "-o",
             filename,
         ]
-    cmds.append(ENSEMBL.format(release=release, plant=plant, file=filename))
+    return cmds
+
+
+def fetch_fasta(
+    plant: str,
+    filename: str,
+    release: int,
+    *,
+    quiet: bool = False,
+) -> subprocess.CompletedProcess[bytes]:
+    url = ENSEMBL.format(release=release, plant=plant, file=filename)
+    return fetch_file(filename, url, release, quiet=quiet)
+
+
+def fetch_file(
+    filename: str,
+    url: str,
+    release: int,
+    *,
+    quiet: bool = False,
+) -> subprocess.CompletedProcess[bytes]:
+    cwd = blast_dir(release)
+    if not cwd.exists():
+        cwd.mkdir(parents=True, exist_ok=True)
+
+    cmds = _wgetcmd(filename, quiet)
+    cmds.append(url)
     resp = subprocess.run(
         cmds,
         cwd=str(cwd),
@@ -101,25 +121,25 @@ def mkblast(plant: str, fastafile: str | Path, release: int) -> bool:
     return bdb.run(directory / fastafile)
 
 
-def doblast(
-    queryfasta: str,
-    plant: str,
-    release: int,
-    header: Sequence[str] | None = None,
-    *,
-    path: str | None,
-    num_threads: int = 1,
-) -> pd.DataFrame:
-    blastdir = blast_dir(release)
-    if path is not None:
-        blastdir = Path(path) / blastdir
+# def doblast(
+#     queryfasta: str,
+#     plant: str,
+#     release: int,
+#     header: Sequence[str] | None = None,
+#     *,
+#     path: str | None,
+#     num_threads: int = 1,
+# ) -> pd.DataFrame:
+#     blastdir = blast_dir(release)
+#     if path is not None:
+#         blastdir = Path(path) / blastdir
 
-    return doblast6(
-        queryfasta,
-        str(blastdir / plant),
-        header=header,
-        num_threads=num_threads,
-    )
+#     return doblast6(
+#         queryfasta,
+#         str(blastdir / plant),
+#         header=header,
+#         num_threads=num_threads,
+#     )
 
 
 def has_blast_db(blastdir: Path, plant: str) -> bool:
@@ -157,6 +177,15 @@ def find_species(release: int) -> list[str]:
         ftp.login()
         ftp.cwd(FASTAS_DIR.format(release=release))
         return list(ftp.nlst())
+
+
+def find_species_file(release: int, *, quiet: bool = False) -> pd.DataFrame | None:
+    url = f"ftp://{FTPURL}/{TOP.format(release=release)}/{SPECIES_TSV}"
+    resp = fetch_file(SPECIES_TSV, url, release, quiet=quiet)
+    if resp.returncode:
+        return None
+    bd = blast_dir(release)
+    return pd.read_csv(bd / SPECIES_TSV, sep="\t")
 
 
 def fetch_fastas(plants: Sequence[str], release: int) -> None:
@@ -231,43 +260,42 @@ def build(species: Sequence[str], release: int, *, path: str | None = None) -> b
 
 
 def blastall(
-    queryfasta: str,
+    queryfasta: str | Path,
     species: Sequence[str],
     release: int,
     *,
     path: str | None = None,
     config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame:
-    df = fasta_to_df(queryfasta, with_description=config.with_description)
-    if not df["id"].is_unique:
+    b6 = Blast6(config.header, num_threads=config.num_threads, blastp=config.blastp)
+
+    check_expr(b6.header, config.expr)  # fail early
+
+    qdf = fasta_to_df(queryfasta, with_description=config.with_description)
+    if not qdf["id"].is_unique:
         raise click.ClickException(
             f'sequences IDs are not unique for query file "{queryfasta}"',
         )
+    if config.without_query_seq:
+        qdf.drop(columns=["seq"], inplace=True)
     res = []
 
     ok = build(species, release, path=path)
     if not ok:
         raise click.ClickException("Can't build blast databases(s)")
-    b6 = Blast6(config.header, num_threads=config.num_threads)
 
-    check_expr(b6.header, config.expr)
-
+    blastdir = blast_dir(release)
+    if path is not None:
+        blastdir = Path(path) / blastdir
     for plant in species:
-        rdf = doblast(
-            queryfasta,
-            plant,
-            release=release,
-            header=config.header,
-            num_threads=config.num_threads,
-            path=path,
-        )
+        rdf = b6.run(queryfasta, blastdir / plant)
 
         if config.with_seq and "saccver" in rdf.columns:
             saccver = list(rdf["saccver"])
             sdf = fetch_seq_df(saccver, plant, release, path=path)
             rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
-        myrdf = find_best(rdf, df, nevalues=config.best, evalue_col=config.expr)
+        myrdf = find_best(rdf, qdf, nevalues=config.best, evalue_col=config.expr)
 
         myrdf["species"] = plant
         res.append(myrdf)
@@ -283,3 +311,25 @@ def available_species(release: int) -> list[str]:
         n, _ = path.name.split(".", maxsplit=1)
         ret.add(n)
     return list(ret)
+
+
+def orthologs(
+    query_species: str,
+    subject_species: str,
+    release: int,
+    config: BlastConfig = BlastConfig(),
+) -> pd.DataFrame | None:
+    if not build([query_species, subject_species], release):
+        return None
+    names = list(find_fasta_names([query_species], release=release))
+    if not names:
+        return None
+    fasta = names[0].fasta
+    if fasta is None:
+        return None
+    blastdir = blast_dir(release)
+    query_fasta = blastdir / fasta
+    if not query_fasta.exists():
+        return None
+
+    return blastall(query_fasta, [subject_species], release=release, config=config)

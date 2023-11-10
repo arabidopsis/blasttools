@@ -27,8 +27,9 @@ def safe_which(cmd: str) -> str:
     return r
 
 
-def read_fasta(path: str) -> Iterator[SeqRecord]:
-    if path.endswith(".gz"):
+def read_fasta(path: str | Path) -> Iterator[SeqRecord]:
+    path = Path(path)
+    if path.name.endswith(".gz"):
         with gzip.open(path, "rt") as fp:
             yield from SeqIO.parse(fp, "fasta")
     else:
@@ -42,7 +43,7 @@ def has_pdatabase(path: str) -> bool:
     return Path(path).exists()
 
 
-def fasta_to_df(path: str, with_description: bool = False) -> pd.DataFrame:
+def fasta_to_df(path: str | Path, with_description: bool = False) -> pd.DataFrame:
     def todict1(rec: SeqRecord) -> dict[str, str]:
         return dict(id=rec.id, seq=str(rec.seq).upper())
 
@@ -161,8 +162,8 @@ class Blast6:
 
     def run(
         self,
-        queryfasta: str,
-        blastdb: str,
+        queryfasta: str | Path,
+        blastdb: str | Path,
     ) -> pd.DataFrame:
         blast = self.get_blast()
         outfmt = f'6 {" ".join(self.header)}'
@@ -174,9 +175,9 @@ class Blast6:
                     "-outfmt",
                     outfmt,
                     "-query",
-                    queryfasta,
+                    str(queryfasta),
                     "-db",
-                    blastdb,
+                    str(blastdb),
                     "-out",
                     out,
                     "-num_threads",
@@ -219,14 +220,18 @@ def write_fasta(df: pd.DataFrame, filename: str) -> None:
         d = row.description if wd else ""
         return SeqRecord(id=row.id, seq=Seq(row.seq), description=d)
 
-    if filename.endswith(".gz"):
+    write_fasta_iter(Path(filename), (toseq(row) for row in r.itertuples()))
+
+
+def write_fasta_iter(filename: Path, records: Iterator[SeqRecord]) -> None:
+    if filename.name.endswith(".gz"):
         with gzip.open(filename, "wt", encoding="utf-8") as fp:
-            for row in r.itertuples():
-                SeqIO.write(toseq(row), fp, format="fasta")
+            for rec in records:
+                SeqIO.write(rec, fp, format="fasta")
     else:
         with open(filename, "w", encoding="utf-8") as fp:
-            for row in r.itertuples():
-                SeqIO.write(toseq(row), fp, format="fasta")
+            for rec in records:
+                SeqIO.write(rec, fp, format="fasta")
 
 
 def remove_files(files: list[str | Path]) -> None:
@@ -316,8 +321,9 @@ def find_best(
     blast_df: pd.DataFrame,
     query_df: pd.DataFrame,
     nevalues: int = 2,
-    evalue_col: str = EVALUE,
-    query_col: str = QUERY,
+    evalue_col: str = EVALUE,  # or qstart - qend + mismatch
+    id_col: str = QUERY,
+    query_id_col: str = "id",
 ) -> pd.DataFrame:
     if evalue_col not in blast_df:
         blast_df[TMP_EVAL_COL] = blast_df.eval(
@@ -326,18 +332,18 @@ def find_best(
         evalue_col = TMP_EVAL_COL
     if nevalues > 0:
         r = (
-            blast_df.groupby(query_col)[evalue_col]
+            blast_df.groupby(id_col)[evalue_col]
             .nsmallest(nevalues)
             .reset_index(level=0)
         )
         myrdf = blast_df.loc[r.index].sort_values(
-            [query_col, evalue_col],
+            [id_col, evalue_col],
             ascending=[True, True],
         )
     else:
-        myrdf = blast_df.sort_values([query_col, evalue_col], ascending=[True, True])
-    myrdf = pd.merge(myrdf, query_df, left_on=query_col, right_on="id")
-    todrop = ["id"]
+        myrdf = blast_df.sort_values([id_col, evalue_col], ascending=[True, True])
+    myrdf = pd.merge(myrdf, query_df, left_on=id_col, right_on=query_id_col)
+    todrop = [query_id_col]
     if TMP_EVAL_COL in myrdf:
         todrop.append(TMP_EVAL_COL)
     myrdf.drop(columns=todrop, inplace=True)
@@ -517,6 +523,7 @@ class BlastConfig:
     with_description: bool = True
     expr: str = EVALUE
     blastp: bool = True
+    without_query_seq: bool = False
 
 
 def blastall(
@@ -525,16 +532,19 @@ def blastall(
     *,
     config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame:
-    df = fasta_to_df(queryfasta, with_description=config.with_description)
-    if not df["id"].is_unique:
-        raise click.ClickException(
-            f'sequences IDs are not unique for query file "{queryfasta}"',
-        )
-    res = []
-
     b6 = Blast6(config.header, num_threads=config.num_threads, blastp=config.blastp)
 
     check_expr(b6.header, config.expr)  # fail early
+
+    qdf = fasta_to_df(queryfasta, with_description=config.with_description)
+    if not qdf["id"].is_unique:
+        raise click.ClickException(
+            f'sequences IDs are not unique for query file "{queryfasta}"',
+        )
+    if config.without_query_seq:
+        qdf.drop(columns=["seq"], inplace=True)
+
+    res = []
     for blastdb in blastdbs:
         rdf = b6.run(queryfasta, blastdb)
 
@@ -543,7 +553,7 @@ def blastall(
             sdf = fetch_seq_df(saccver, blastdb)
             rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
-        myrdf = find_best(rdf, df, nevalues=config.best, evalue_col=config.expr)
+        myrdf = find_best(rdf, qdf, nevalues=config.best, evalue_col=config.expr)
         myrdf["blastdb"] = Path(blastdb).name
         res.append(myrdf)
     ddf = pd.concat(res, axis=0, ignore_index=True)

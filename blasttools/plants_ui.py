@@ -74,7 +74,7 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     default=0,
     help="best (lowest) evalues [=0 take all]  (see also --expr)",
 )
-@click.option("--with-seq", is_flag=True, help="add sequence data to output")
+@click.option("--with-seq", is_flag=True, help="add subject sequence data to output")
 @click.option(
     "-n",
     "--names",
@@ -113,6 +113,7 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     help="find all 'ensembleblast-{release}' directories in this directory",
 )
 @click.option("-t", "--num-threads", help="number of threads to use", default=1)
+@click.option("--without-query-seq", is_flag=True, help="don't output query sequence")
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("species", nargs=-1)
 @pass_config
@@ -130,6 +131,7 @@ def blast_cmd(
     all_db: bool,
     with_description: bool,
     expr: str,
+    without_query_seq: bool,
 ) -> None:
     """Run blast on query fasta file"""
     from .blastapi import check_ext
@@ -157,6 +159,7 @@ def blast_cmd(
         num_threads=num_threads,
         with_description=with_description,
         expr=expr,
+        without_query_seq=without_query_seq,
     )
     df = blastall(query, species, release=cfg.release, path=builddir, config=config)
     if out is None:

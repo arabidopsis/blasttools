@@ -12,7 +12,7 @@ from uuid import uuid4
 import click
 import pandas as pd
 from Bio.Blast.NCBIXML import parse  # type: ignore
-from Bio.Blast.Record import Alignment
+from Bio.Blast.Record import Alignment  # type: ignore
 from Bio.Blast.Record import Blast
 from Bio.Blast.Record import HSP
 
@@ -78,24 +78,24 @@ def out5_to_df(xmlfile: str) -> pd.DataFrame:
 
 @dataclass
 class Hit:
-    query: str  # full string from fasta description line
+    queryid: str  # full string from fasta description line
     query_length: int
     accession: str
     accession_length: int  # accession length
-    hsp_align_length: int
-    hsp_bits: float
-    hsp_score: float
-    hsp_expect: float
-    hsp_identities: int
-    hsp_positives: int
-    hsp_gaps: int
-    hsp_match: str
-    hsp_query: str
-    hsp_query_start: int
-    hsp_query_end: int
-    hsp_sbjct: str
-    hsp_sbjct_start: int
-    hsp_sbjct_end: int
+    align_length: int
+    bits: float
+    score: float
+    expect: float
+    identities: int
+    positives: int
+    gaps: int
+    match: str
+    query: str
+    query_start: int
+    query_end: int
+    sbjct: str
+    sbjct_start: int
+    sbjct_end: int
 
 
 HEADER = [f.name for f in fields(Hit)]
@@ -115,26 +115,26 @@ def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
     for b, a, h in unwind(xml):
         # b.query is the full line in the query fasta
         # actually <query-def>
-        query = b.query.split(None, 1)[0] if not full else b.query
+        queryid = b.query.split(None, 1)[0] if not full else b.query
         yield Hit(
-            query=query,
+            queryid=queryid,
             query_length=b.query_length,
             accession=a.accession,  # saccver
             accession_length=a.length,
-            hsp_align_length=h.align_length,  # alignment length
-            hsp_bits=h.bits,  # bitscore
-            hsp_score=h.score,  # bitscore?
-            hsp_expect=h.expect,  # evalue
-            hsp_identities=h.identities,
-            hsp_gaps=h.gaps,
-            hsp_positives=h.positives,
-            hsp_match=h.match,
-            hsp_query=h.query,
-            hsp_query_start=h.query_start,  # qstart
-            hsp_query_end=h.query_end,  # qend
-            hsp_sbjct=h.sbjct,
-            hsp_sbjct_start=h.sbjct_start,  # sstart
-            hsp_sbjct_end=h.sbjct_end,  # send
+            align_length=h.align_length,  # alignment length
+            bits=h.bits,  # bitscore
+            score=h.score,  # bitscore?
+            expect=h.expect,  # evalue
+            identities=h.identities,
+            gaps=h.gaps,
+            positives=h.positives,
+            match=h.match,
+            query=h.query,
+            query_start=h.query_start,  # qstart
+            query_end=h.query_end,  # qend
+            sbjct=h.sbjct,
+            sbjct_start=h.sbjct_start,  # sstart
+            sbjct_end=h.sbjct_end,  # send
         )
 
 
@@ -228,10 +228,11 @@ def blastall(
             df,
             nevalues=config.best,
             evalue_col=config.expr,
-            query_col="query",
+            id_col="queryid",
         )
         myrdf["blastdb"] = Path(blastdb).name
         res.append(myrdf)
+
     ddf = pd.concat(res, axis=0, ignore_index=True)
 
     return ddf
