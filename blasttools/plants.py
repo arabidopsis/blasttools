@@ -24,6 +24,7 @@ from .blastapi import (
     EVALUE,
     Blast6,
     check_expr,
+    BlastConfig,
 )
 
 from .blastapi import BlastDb
@@ -158,7 +159,7 @@ def fetch_fastas(plants: Sequence[str], release: int) -> None:
 
     for info in find_fasta_names(plants, release):
         if info.fasta is None:
-            click.echo(f"can't find fasta for {info.species}!", err=True)
+            click.echo(f"Can't find fasta for {info.species}!", err=True)
             continue
 
         if (bd / info.fasta).exists():
@@ -226,16 +227,11 @@ def blastall(
     queryfasta: str,
     species: Sequence[str],
     release: int,
-    best: int,
-    with_seq: bool,
-    header: Sequence[str] | None = None,
     *,
-    path: str | None,
-    num_threads: int = 1,
-    with_description: bool = True,
-    expr: str = EVALUE,
+    path: str | None = None,
+    config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame:
-    df = fasta_to_df(queryfasta, with_description=with_description)
+    df = fasta_to_df(queryfasta, with_description=config.with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
             f'sequences IDs are not unique for query file "{queryfasta}"'
@@ -244,27 +240,27 @@ def blastall(
 
     ok = build(species, release, path=path)
     if not ok:
-        raise click.ClickException("can't build blast databases(s)")
-    b6 = Blast6(header, num_threads=num_threads)
+        raise click.ClickException("Can't build blast databases(s)")
+    b6 = Blast6(config.header, num_threads=config.num_threads)
 
-    check_expr(b6.header, expr)
+    check_expr(b6.header, config.expr)
 
     for plant in species:
         rdf = doblast(
             queryfasta,
             plant,
             release=release,
-            header=header,
-            num_threads=num_threads,
+            header=config.header,
+            num_threads=config.num_threads,
             path=path,
         )
 
-        if with_seq and "saccver" in rdf.columns:
+        if config.with_seq and "saccver" in rdf.columns:
             saccver = list(rdf["saccver"])
             sdf = fetch_seq_df(saccver, plant, release, path=path)
             rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
-        myrdf = find_best(rdf, df, nevalues=best, evalue_col=expr)
+        myrdf = find_best(rdf, df, nevalues=config.best, evalue_col=config.expr)
 
         myrdf["species"] = plant
         res.append(myrdf)

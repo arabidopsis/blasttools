@@ -71,3 +71,11 @@ df = pd.concat([pd.read_pickle(f) for f in glob('my*.pkl')], ignore_index=True)
 Remember: if you parallelize your blasts _and_ use `--num-threads > 1`
 then you are probably going to be fighting for cpu time
 amongst yourselves!
+
+## Best matches
+
+Usually if you want the top/best `--best=3` will select the _lowest_ evalue's for
+each query sequence. However if you want say the best to, say, be the longest query match
+then you can add `--expr='qstart - qend'`. (Remember we are looking for the lowest values).
+
+If you are using `--xml` output the `--expr='hsp_quesy_start - hsp_query_end'`

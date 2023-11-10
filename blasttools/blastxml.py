@@ -18,6 +18,7 @@ from .blastapi import (
     find_best,
     fetch_seq_df,
     check_expr,
+    BlastConfig,
 )
 
 
@@ -52,7 +53,7 @@ class BlastXML:
                 check=False,
             )
             if r.returncode:
-                raise click.ClickException(f"can't blast {queryfasta}")
+                raise click.ClickException(f"Can't blast {queryfasta}")
             with open(out, "rt", encoding="utf-8") as fp:
                 yield from parse(fp)
         finally:
@@ -192,38 +193,32 @@ def blastxml_to_df(
 
 
 def blastall(
-    queryfasta: str,
-    blastdbs: Sequence[str],
-    best: int,
-    with_seq: bool,
-    *,
-    num_threads: int = 1,
-    blastp: bool = True,
-    with_description: bool = True,
-    expr: str = "hsp_expect",
+    queryfasta: str, blastdbs: Sequence[str], *, config: BlastConfig = BlastConfig()
 ) -> pd.DataFrame:
-    if expr not in HEADER:
-        check_expr(HEADER, expr)  # fail early
-    df = fasta_to_df(queryfasta, with_description=with_description)
+    if config.expr not in HEADER:
+        check_expr(HEADER, config.expr)  # fail early
+    df = fasta_to_df(queryfasta, with_description=config.with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
             f'sequences IDs are not unique for query file "{queryfasta}"'
         )
     res = []
 
-    b5 = BlastXML(num_threads=num_threads, blastp=blastp)
+    b5 = BlastXML(num_threads=config.num_threads, blastp=config.blastp)
     for blastdb in blastdbs:
         rdf = b5.run(queryfasta, blastdb)
 
-        if with_seq and "accession" in rdf.columns:
+        if config.with_seq and "accession" in rdf.columns:
             saccver = list(rdf["accession"])
             sdf = fetch_seq_df(saccver, blastdb)
             sdf.rename(columns={"saccver": "accession"}, inplace=True)
             rdf = pd.merge(rdf, sdf, left_on="accession", right_on="accession")
 
-        myrdf = find_best(rdf, df, nevalues=best, evalue_col=expr, query_col="query")
+        myrdf = find_best(
+            rdf, df, nevalues=config.best, evalue_col=config.expr, query_col="query"
+        )
         myrdf["blastdb"] = Path(blastdb).name
         res.append(myrdf)
-    ddf = pd.concat(res, axis=0)
+    ddf = pd.concat(res, axis=0, ignore_index=True)
 
     return ddf

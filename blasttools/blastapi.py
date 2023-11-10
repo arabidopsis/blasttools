@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Iterator, Sequence
 from functools import cache
 import gzip
 import os
+from io import BytesIO
 
 import subprocess
 from shutil import which
@@ -184,7 +186,7 @@ class Blast6:
             )
             if r.returncode:
                 b = "blastp" if self.blastp else "blastn"
-                raise click.ClickException(f"can't run {b} using {queryfasta}")
+                raise click.ClickException(f"Can't run {b} using {queryfasta}")
             return out6_to_df(out, self.header)
         finally:
             remove_files([out])
@@ -213,7 +215,7 @@ def write_fasta(df: pd.DataFrame, filename: str) -> None:
         r = df[["id", "seq"]]
         wd = False
 
-    def toseq(row):
+    def toseq(row) -> SeqRecord:
         d = row.description if wd else ""
         return SeqRecord(id=row.id, seq=Seq(row.seq), description=d)
 
@@ -249,7 +251,7 @@ def fetch_seq(seqids: Sequence[str], blastdb: str) -> Iterator[SeqRecord]:
             check=False,
         )
         if r.returncode:
-            raise click.ClickException("can't fetch sequences")
+            raise click.ClickException("Can't fetch sequences")
         with open(out, "rt", encoding="utf-8") as fp:
             yield from SeqIO.parse(fp, "fasta")
     finally:
@@ -299,7 +301,7 @@ def merge_fasta(
     write_fasta(df, out)
 
 
-EVAL_COL = "__xxxx__"
+TMP_EVAL_COL = "__xxxx__"
 
 
 def find_best(
@@ -310,8 +312,10 @@ def find_best(
     query_col: str = QUERY,
 ) -> pd.DataFrame:
     if evalue_col not in blast_df:
-        blast_df[EVAL_COL] = blast_df.eval(query_col)
-
+        blast_df[TMP_EVAL_COL] = blast_df.eval(
+            evalue_col
+        )  # expression like 'qstart - qend'
+        evalue_col = TMP_EVAL_COL
     if nevalues > 0:
         r = (
             blast_df.groupby(query_col)[evalue_col]
@@ -325,8 +329,8 @@ def find_best(
         myrdf = blast_df.sort_values([query_col, evalue_col], ascending=[True, True])
     myrdf = pd.merge(myrdf, query_df, left_on=query_col, right_on="id")
     todrop = ["id"]
-    if EVAL_COL in myrdf:
-        todrop.append(EVAL_COL)
+    if TMP_EVAL_COL in myrdf:
+        todrop.append(TMP_EVAL_COL)
     myrdf.drop(columns=todrop, inplace=True)
     return myrdf
 
@@ -380,6 +384,7 @@ def save_df(
     index: bool = False,
     default: str = "csv",
     key: str = "blast",
+    io: BytesIO | None = None,
 ) -> None:
     filename = Path(filename)
     ext = get_ext(filename)
@@ -408,11 +413,13 @@ def save_df(
             df.to_csv(filename, index=index)
     except ModuleNotFoundError as exc:
         csvf = str(filename) + ".csv"
-        click.secho(
-            f"Can't save as {ext} ({exc}). Will save as *CSV* to this {csvf}",
+        msg1 = click.style(
+            f"Can't save as file type: {ext} ({exc}).", fg="red", bold=True
+        )
+        msg2 = click.style(f'Will save as *CSV* to "{csvf}".', fg="green", bold=True)
+        click.echo(
+            f"{msg1} {msg2}",
             err=True,
-            fg="red",
-            bold=True,
         )
         df.to_csv(csvf, index=False)
 
@@ -446,7 +453,7 @@ def toblastdb(blastdbs: Sequence[str]) -> list[str]:
     return sorted(s)
 
 
-def check_expr(headers: Sequence[str], expr: str):
+def check_expr(headers: Sequence[str], expr: str) -> None:
     df = pd.DataFrame({col: [] for col in headers})
     try:
         df.eval(expr)
@@ -459,41 +466,43 @@ def check_expr(headers: Sequence[str], expr: str):
         raise click.BadParameter(str(exc), param_hint="expr") from exc
 
 
+@dataclass
+class BlastConfig:
+    best: int = 0
+    with_seq: bool = False
+    header: Sequence[str] | None = None
+    # path: str | None = None
+    num_threads: int = 1
+    with_description: bool = True
+    expr: str = EVALUE
+    blastp: bool = True
+
+
 def blastall(
-    queryfasta: str,
-    blastdbs: Sequence[str],
-    best: int,
-    with_seq: bool,
-    *,
-    num_threads: int = 1,
-    blastp: bool = True,
-    header: Sequence[str] | None = None,
-    with_description: bool = False,
-    expr: str = EVALUE,
+    queryfasta: str, blastdbs: Sequence[str], *, config: BlastConfig = BlastConfig()
 ) -> pd.DataFrame:
-    df = fasta_to_df(queryfasta, with_description=with_description)
+    df = fasta_to_df(queryfasta, with_description=config.with_description)
     if not df["id"].is_unique:
         raise click.ClickException(
             f'sequences IDs are not unique for query file "{queryfasta}"'
         )
     res = []
 
-    b6 = Blast6(header, num_threads=num_threads, blastp=blastp)
+    b6 = Blast6(config.header, num_threads=config.num_threads, blastp=config.blastp)
 
-    h = b6.header
-    check_expr(h, expr)
+    check_expr(b6.header, config.expr)  # fail early
     for blastdb in blastdbs:
         rdf = b6.run(queryfasta, blastdb)
 
-        if with_seq and "saccver" in rdf.columns:
+        if config.with_seq and "saccver" in rdf.columns:
             saccver = list(rdf["saccver"])
             sdf = fetch_seq_df(saccver, blastdb)
             rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
-        myrdf = find_best(rdf, df, nevalues=best, evalue_col=expr)
+        myrdf = find_best(rdf, df, nevalues=config.best, evalue_col=config.expr)
         myrdf["blastdb"] = Path(blastdb).name
         res.append(myrdf)
-    ddf = pd.concat(res, axis=0)
+    ddf = pd.concat(res, axis=0, ignore_index=True)
 
     return ddf
 
@@ -535,7 +544,7 @@ def buildall(
             b = BlastDb(db, blastp=blastp)
             ok = b.run(fa)
             if not ok:
-                raise click.ClickException(f"can't build database with {fastafile}")
+                raise click.ClickException(f"Can't build database with {fastafile}")
     finally:
         if out:
             remove_files([out])

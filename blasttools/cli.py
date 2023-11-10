@@ -11,6 +11,7 @@ from .blastapi import (
     check_ext,
     read_df,
     EVALUE,
+    BlastConfig,
 )
 
 
@@ -32,7 +33,7 @@ def update() -> None:
 
     ret = subprocess.call([sys.executable, "-m", "pip", "install", "-U", REPO])
     if ret:
-        click.secho(f"can't install {REPO}", fg="red", err=True)
+        click.secho(f"Can't install {REPO}", fg="red", err=True)
         raise click.Abort()
 
 
@@ -78,12 +79,16 @@ def build_cmd(
 @click.option(
     "-d", "--with-description", is_flag=True, help="include query description"
 )
-@click.option("--best", default=0, help="best (lowest) evalues [=0 take all] (see also --expr)")
+@click.option(
+    "--best", default=0, help="best (lowest) evalues [=0 take all] (see also --expr)"
+)
 @click.option("--xml", is_flag=True, help="run with xml output")
 @click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option("-t", "--num-threads", help="number of threads to use", default=1)
-@click.option("--expr", help="expression to minimize", default=EVALUE, show_default=True)
+@click.option(
+    "--expr", help="expression to minimize", default=EVALUE, show_default=True
+)
 @click.option(
     "-c",
     "--columns",
@@ -126,32 +131,21 @@ def blast_cmd(
                 'can\'t have "--columns" with "--xml"', param_hint="xml"
             )
         myheader = mkheader(columns)
-
+    if xml and expr == EVALUE:
+        expr = "hsp_expect"
+    config = BlastConfig(
+        best=best,
+        with_seq=with_seq,
+        header=myheader,
+        num_threads=num_threads,
+        with_description=with_description,
+        expr=expr,
+        blastp=not nucl,
+    )
     if xml:
-        if expr == EVALUE:
-            expr = "hsp_expect"
-        df = blastall5(
-            query,
-            blastdbs,
-            with_seq=with_seq,
-            best=best,
-            num_threads=num_threads,
-            blastp=not nucl,
-            with_description=with_description,
-            expr=expr,
-        )
+        df = blastall5(query, blastdbs, config=config)
     else:
-        df = blastall(
-            query,
-            blastdbs,
-            with_seq=with_seq,
-            best=best,
-            header=myheader,
-            num_threads=num_threads,
-            blastp=not nucl,
-            with_description=with_description,
-            expr=expr,
-        )
+        df = blastall(query, blastdbs, config=config)
     if out is None:
         out = query + ".csv"
     click.secho(f"writing {out}", fg="green")
@@ -194,7 +188,7 @@ def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
     for df in dataframes:
         res = read_df(df)
         if res is None:
-            click.secho(f"can't read {df}", err=True, bold=True, fg="red")
+            click.secho(f"Can't read {df}", err=True, bold=True, fg="red")
             continue
         dfs.append(res)
 

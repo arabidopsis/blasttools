@@ -19,7 +19,7 @@ def exact(query: str, subjects: Sequence[str]) -> pd.DataFrame:
                 if str(r.seq).upper() in str(rec.seq).upper():
                     dd[r.id].append(rec.id)
 
-    ret: dict[str, list[Any]] = dict(id=[],  description=[], exact=[], subject=[])
+    ret: dict[str, list[Any]] = dict(id=[], description=[], exact=[], subject=[])
     for r in df.itertuples():
         found = r.id in dd
         ret["id"].append(r.id)

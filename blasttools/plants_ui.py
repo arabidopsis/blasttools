@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Sequence
 import click
 from .config import RELEASE
+from .blastapi import EVALUE, BlastConfig
 
 from .plants import (
     build,
@@ -10,7 +11,6 @@ from .plants import (
     fetch_fastas,
     find_fasta_names,
     find_species,
-    EVALUE,
 )
 
 from .cli import blast
@@ -63,7 +63,9 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     help="output filename (default is to write <query>.csv)",
     type=click.Path(dir_okay=False),
 )
-@click.option("--best", default=0, help="best (lowest) evalues [=0 take all]  (see also --expr)")
+@click.option(
+    "--best", default=0, help="best (lowest) evalues [=0 take all]  (see also --expr)"
+)
 @click.option("--with-seq", is_flag=True, help="add sequence data to output")
 @click.option(
     "-n", "--names", is_flag=True, help="use descriptive column names in output"
@@ -71,7 +73,9 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
 @click.option(
     "-d", "--with-description", is_flag=True, help="include query description"
 )
-@click.option("--expr", help="expression to minimize", default=EVALUE, show_default=True)
+@click.option(
+    "--expr", help="expression to minimize", default=EVALUE, show_default=True
+)
 @click.option(
     "-c",
     "--columns",
@@ -128,19 +132,15 @@ def blast_cmd(
         species = available_species(cfg.release)
         if len(species) == 0:
             return
-
-    df = blastall(
-        query,
-        species,
-        release=cfg.release,
+    config = BlastConfig(
         best=best,
         with_seq=with_seq,
         header=myheader,
         num_threads=num_threads,
-        path=builddir,
         with_description=with_description,
         expr=expr,
     )
+    df = blastall(query, species, release=cfg.release, path=builddir, config=config)
     if out is None:
         out = query + ".csv"
     if names:
