@@ -20,7 +20,6 @@ from .blastapi import BlastDb
 from .blastapi import check_expr
 from .blastapi import fasta_to_df
 from .blastapi import fetch_seq as fetch_seq_raw
-from .blastapi import find_best
 from .blastapi import remove_files
 from .blastapi import safe_which
 
@@ -121,27 +120,6 @@ def mkblast(plant: str, fastafile: str | Path, release: int) -> bool:
     return bdb.run(directory / fastafile)
 
 
-# def doblast(
-#     queryfasta: str,
-#     plant: str,
-#     release: int,
-#     header: Sequence[str] | None = None,
-#     *,
-#     path: str | None,
-#     num_threads: int = 1,
-# ) -> pd.DataFrame:
-#     blastdir = blast_dir(release)
-#     if path is not None:
-#         blastdir = Path(path) / blastdir
-
-#     return doblast6(
-#         queryfasta,
-#         str(blastdir / plant),
-#         header=header,
-#         num_threads=num_threads,
-#     )
-
-
 def has_blast_db(blastdir: Path, plant: str) -> bool:
     return len(glob.glob(str(blastdir / (plant + ".*")))) > 0
 
@@ -173,6 +151,10 @@ def fetch_seq_df(
 def find_species(release: int) -> list[str]:
     from .config import FTP_TIMEOUT
 
+    df = find_species_file(release, quiet=True)
+    if df is not None:
+        return df["species"].to_list()
+
     with ftplib.FTP(FTPURL, timeout=FTP_TIMEOUT) as ftp:
         ftp.login()
         ftp.cwd(FASTAS_DIR.format(release=release))
@@ -180,12 +162,15 @@ def find_species(release: int) -> list[str]:
 
 
 def find_species_file(release: int, *, quiet: bool = False) -> pd.DataFrame | None:
+    bd = blast_dir(release)
+    sfile = bd / SPECIES_TSV
+    if sfile.exists():
+        return pd.read_csv(sfile, sep="\t")
     url = f"ftp://{FTPURL}/{TOP.format(release=release)}/{SPECIES_TSV}"
     resp = fetch_file(SPECIES_TSV, url, release, quiet=quiet)
-    if resp.returncode:
+    if resp.returncode or not sfile.exists():
         return None
-    bd = blast_dir(release)
-    return pd.read_csv(bd / SPECIES_TSV, sep="\t")
+    return pd.read_csv(sfile, sep="\t")
 
 
 def fetch_fastas(plants: Sequence[str], release: int) -> None:
@@ -271,14 +256,11 @@ def blastall(
 
     check_expr(b6.header, config.expr)  # fail early
 
-    qdf = fasta_to_df(queryfasta, with_description=config.with_description)
-    if not qdf["id"].is_unique:
-        raise click.ClickException(
-            f'sequences IDs are not unique for query file "{queryfasta}"',
-        )
-    if config.without_query_seq:
-        qdf.drop(columns=["seq"], inplace=True)
-    res = []
+    qdf = fasta_to_df(
+        queryfasta,
+        with_description=config.with_description,
+        without_query_seq=config.without_query_seq,
+    )
 
     ok = build(species, release, path=path)
     if not ok:
@@ -287,21 +269,12 @@ def blastall(
     blastdir = blast_dir(release)
     if path is not None:
         blastdir = Path(path) / blastdir
-    for plant in species:
-        rdf = b6.run(queryfasta, blastdir / plant)
-
-        if config.with_seq and "saccver" in rdf.columns:
-            saccver = list(rdf["saccver"])
-            sdf = fetch_seq_df(saccver, plant, release, path=path)
-            rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
-
-        myrdf = find_best(rdf, qdf, nevalues=config.best, evalue_col=config.expr)
-
-        myrdf["species"] = plant
-        res.append(myrdf)
-    ddf = pd.concat(res, axis=0)
-
-    return ddf
+    return b6.blastall(
+        qdf,
+        queryfasta,
+        [(plant, blastdir / plant) for plant in species],
+        config=config,
+    )
 
 
 def available_species(release: int) -> list[str]:
@@ -313,15 +286,8 @@ def available_species(release: int) -> list[str]:
     return list(ret)
 
 
-def orthologs(
-    query_species: str,
-    subject_species: str,
-    release: int,
-    config: BlastConfig = BlastConfig(),
-) -> pd.DataFrame | None:
-    if not build([query_species, subject_species], release):
-        return None
-    names = list(find_fasta_names([query_species], release=release))
+def ensure_fasta(species: str, release: int) -> Path | None:
+    names = list(find_fasta_names([species], release=release))
     if not names:
         return None
     fasta = names[0].fasta
@@ -330,6 +296,34 @@ def orthologs(
     blastdir = blast_dir(release)
     query_fasta = blastdir / fasta
     if not query_fasta.exists():
+        ret = fetch_fasta(species, fasta, release, quiet=True)
+        if ret.returncode:
+            return None
+    if not query_fasta.exists():
+        return None
+    return query_fasta
+
+
+def orthologs(
+    query_species: str,
+    subject_species: str,
+    release: int,
+    config: BlastConfig = BlastConfig(),
+) -> pd.DataFrame | None:
+
+    query_fasta = ensure_fasta(query_species, release)
+    if query_fasta is None:
+        return None
+    return orthologs2(query_fasta, subject_species, release, config=config)
+
+
+def orthologs2(
+    query_fasta: str | Path,
+    subject_species: str,
+    release: int,
+    config: BlastConfig = BlastConfig(),
+) -> pd.DataFrame | None:
+    if not build([subject_species], release):
         return None
 
     return blastall(query_fasta, [subject_species], release=release, config=config)

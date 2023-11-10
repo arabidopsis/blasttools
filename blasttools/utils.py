@@ -41,6 +41,7 @@ def split_fasta(
         target_dir = fastafile.parent
     else:
         target_dir = Path(target_dir)
+        target_dir.mkdir(parents=True, exist_ok=True)
     for num, it in enumerate(batched(read_fasta(fastafile), batch), start=1):
         sname = target_dir / fname.format(num=num)
         ret.append(sname)

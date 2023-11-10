@@ -43,7 +43,11 @@ def has_pdatabase(path: str) -> bool:
     return Path(path).exists()
 
 
-def fasta_to_df(path: str | Path, with_description: bool = False) -> pd.DataFrame:
+def fasta_to_df(
+    path: str | Path,
+    with_description: bool = False,
+    without_query_seq: bool = False,
+) -> pd.DataFrame:
     def todict1(rec: SeqRecord) -> dict[str, str]:
         return dict(id=rec.id, seq=str(rec.seq).upper())
 
@@ -51,7 +55,15 @@ def fasta_to_df(path: str | Path, with_description: bool = False) -> pd.DataFram
         return dict(id=rec.id, seq=str(rec.seq).upper(), description=rec.description)
 
     todict = todict2 if with_description else todict1
-    return pd.DataFrame([todict(rec) for rec in read_fasta(path)])
+    qdf = pd.DataFrame([todict(rec) for rec in read_fasta(path)])
+
+    if not qdf["id"].is_unique:
+        raise click.ClickException(
+            f'sequences IDs are not unique for query file "{path}"',
+        )
+    if without_query_seq:
+        qdf.drop(columns=["seq"], inplace=True)
+    return qdf
 
 
 class BlastDb:
@@ -192,16 +204,29 @@ class Blast6:
         finally:
             remove_files([out])
 
+    def blastall(
+        self,
+        qdf: pd.DataFrame,
+        queryfasta: str | Path,
+        blastdbs: Sequence[tuple[str, str | Path]],
+        *,
+        config,
+    ) -> pd.DataFrame:
+        res = []
+        for species, blastdb in blastdbs:
+            rdf = self.run(queryfasta, blastdb)
 
-def doblast6(
-    queryfasta: str,
-    blastdb: str,
-    header: Sequence[str] | None = None,
-    *,
-    num_threads: int = 1,
-) -> pd.DataFrame:
-    b6 = Blast6(header, num_threads=num_threads)
-    return b6.run(queryfasta, blastdb)
+            if config.with_seq and "saccver" in rdf.columns:
+                saccver = list(rdf["saccver"])
+                sdf = fetch_seq_df(saccver, blastdb)
+                rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
+
+            myrdf = find_best(rdf, qdf, nevalues=config.best, evalue_col=config.expr)
+            myrdf["species"] = species
+            res.append(myrdf)
+        ddf = pd.concat(res, axis=0, ignore_index=True)
+
+        return ddf
 
 
 def out6_to_df(tsvfile: str, header: Sequence[str] = HEADER) -> pd.DataFrame:
@@ -242,7 +267,7 @@ def remove_files(files: list[str | Path]) -> None:
             pass
 
 
-def fetch_seq(seqids: Sequence[str], blastdb: str) -> Iterator[SeqRecord]:
+def fetch_seq(seqids: Sequence[str], blastdb: str | Path) -> Iterator[SeqRecord]:
     blastdbcmd = safe_which("blastdbcmd")
     u = uuid4()
     seqfile = f"{u}.seq"
@@ -252,7 +277,7 @@ def fetch_seq(seqids: Sequence[str], blastdb: str) -> Iterator[SeqRecord]:
             for seq in seqids:
                 print(seq, file=fp)
         r = subprocess.run(
-            [blastdbcmd, "-db", blastdb, "-out", out, "-entry_batch", seqfile],
+            [blastdbcmd, "-db", str(blastdb), "-out", out, "-entry_batch", seqfile],
             check=False,
         )
         if r.returncode:
@@ -350,7 +375,7 @@ def find_best(
     return myrdf
 
 
-def fetch_seq_df(seqids: Sequence[str], database: str) -> pd.DataFrame:
+def fetch_seq_df(seqids: Sequence[str], database: str | Path) -> pd.DataFrame:
     return pd.DataFrame(
         [
             {"saccver": rec.id, "subject_seq": str(rec.seq)}
@@ -410,7 +435,7 @@ def try_save(
         df.to_parquet(filename, index=index)
     elif ext in {"pkl", "pickle"}:
         df.to_pickle(filename)
-    elif ext in {"hdf", "h5"}:
+    elif ext in {"hdf", "h5", "hd5"}:
         df.to_hdf(filename, key)
     else:
         return False
@@ -427,7 +452,7 @@ def test_save(filename: str | Path):
     with tempfile.NamedTemporaryFile(suffix="." + ext) as fp:
         try:
             try_save(ext, df, fp.name)
-        except ModuleNotFoundError as exc:
+        except (ModuleNotFoundError, ImportError) as exc:
             raise click.ClickException(
                 f"Can't save DataFrame as {filename} ({exc})",
             ) from exc
@@ -526,6 +551,45 @@ class BlastConfig:
     without_query_seq: bool = False
 
 
+def blast_options(f):
+    f = click.option(
+        "--without-query-seq",
+        is_flag=True,
+        help="don't output query sequence",
+    )(f)
+
+    f = click.option(
+        "-t",
+        "--num-threads",
+        help="number of threads to use for blast",
+        default=1,
+    )(f)
+    f = click.option(
+        "--expr",
+        help="expression to minimize when looking for --best. e.g. ",
+        default=EVALUE,
+        show_default=True,
+    )(f)
+    f = click.option(
+        "-d",
+        "--with-description",
+        is_flag=True,
+        help="include query description in output",
+    )(f)
+    f = click.option(
+        "--with-seq",
+        is_flag=True,
+        help="add subject sequence data to output",
+    )(f)
+
+    f = click.option(
+        "--best",
+        default=0,
+        help="best (lowest) evalues [=0 take all]  (see also --expr)",
+    )(f)
+    return f
+
+
 def blastall(
     queryfasta: str,
     blastdbs: Sequence[str],
@@ -536,29 +600,18 @@ def blastall(
 
     check_expr(b6.header, config.expr)  # fail early
 
-    qdf = fasta_to_df(queryfasta, with_description=config.with_description)
-    if not qdf["id"].is_unique:
-        raise click.ClickException(
-            f'sequences IDs are not unique for query file "{queryfasta}"',
-        )
-    if config.without_query_seq:
-        qdf.drop(columns=["seq"], inplace=True)
+    qdf = fasta_to_df(
+        queryfasta,
+        with_description=config.with_description,
+        without_query_seq=config.without_query_seq,
+    )
 
-    res = []
-    for blastdb in blastdbs:
-        rdf = b6.run(queryfasta, blastdb)
-
-        if config.with_seq and "saccver" in rdf.columns:
-            saccver = list(rdf["saccver"])
-            sdf = fetch_seq_df(saccver, blastdb)
-            rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
-
-        myrdf = find_best(rdf, qdf, nevalues=config.best, evalue_col=config.expr)
-        myrdf["blastdb"] = Path(blastdb).name
-        res.append(myrdf)
-    ddf = pd.concat(res, axis=0, ignore_index=True)
-
-    return ddf
+    return b6.blastall(
+        qdf,
+        queryfasta,
+        [(Path(db).name, db) for db in blastdbs],
+        config=config,
+    )
 
 
 def concat_fasta(fastafiles: Sequence[str], out: str) -> None:

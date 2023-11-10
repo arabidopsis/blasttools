@@ -5,8 +5,9 @@ from typing import Sequence
 
 import click
 
+from .blastapi import blast_options
 from .blastapi import BlastConfig
-from .blastapi import EVALUE
+from .blastapi import check_ext
 from .blastapi import mkheader
 from .blastapi import save_df
 from .blastapi import test_save
@@ -17,6 +18,7 @@ from .plants import build
 from .plants import fetch_fastas
 from .plants import find_fasta_names
 from .plants import find_species
+from .plants import orthologs
 
 
 @dataclass
@@ -70,28 +72,10 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     type=click.Path(dir_okay=False),
 )
 @click.option(
-    "--best",
-    default=0,
-    help="best (lowest) evalues [=0 take all]  (see also --expr)",
-)
-@click.option("--with-seq", is_flag=True, help="add subject sequence data to output")
-@click.option(
     "-n",
     "--names",
     is_flag=True,
     help="use descriptive column names in output",
-)
-@click.option(
-    "-d",
-    "--with-description",
-    is_flag=True,
-    help="include query description",
-)
-@click.option(
-    "--expr",
-    help="expression to minimize",
-    default=EVALUE,
-    show_default=True,
 )
 @click.option(
     "-c",
@@ -112,8 +96,7 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     type=click.Path(file_okay=False, dir_okay=True),
     help="find all 'ensembleblast-{release}' directories in this directory",
 )
-@click.option("-t", "--num-threads", help="number of threads to use", default=1)
-@click.option("--without-query-seq", is_flag=True, help="don't output query sequence")
+@blast_options
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("species", nargs=-1)
 @pass_config
@@ -121,20 +104,20 @@ def blast_cmd(
     cfg: Config,
     query: str,
     species: Sequence[str],
-    best: int,
-    with_seq: bool,
     out: str | None,
     names: bool,
     columns: str | None,
-    num_threads: int,
     builddir: str | None,
     all_db: bool,
+    # blast options
+    best: int,
+    with_seq: bool,
+    num_threads: int,
     with_description: bool,
     expr: str,
     without_query_seq: bool,
 ) -> None:
     """Run blast on query fasta file"""
-    from .blastapi import check_ext
     from .plants import available_species
     from .columns import VALID
 
@@ -208,3 +191,47 @@ def species_cmd(cfg: Config) -> None:
     sl = find_species(cfg.release)
     for s in sorted(sl):
         click.echo(s)
+
+
+@plants.command(name="ortholog")
+@click.option(
+    "--out",
+    help="output filename (default is to write <query>.csv)",
+    type=click.Path(dir_okay=False),
+)
+@blast_options
+@click.argument("query_species")
+@click.argument("subject_species")
+@pass_config
+def ortholog_cmd(
+    cfg: Config,
+    query_species: str,
+    subject_species: str,
+    out: str | None,
+    best: int,
+    with_seq: bool,
+    num_threads: int,
+    with_description: bool,
+    expr: str,
+    without_query_seq: bool,
+) -> None:
+    """Create an ortholog DataFrame between two species"""
+    config = BlastConfig(
+        best=best,
+        with_seq=with_seq,
+        header=None,
+        num_threads=num_threads,
+        with_description=with_description,
+        expr=expr,
+        without_query_seq=without_query_seq,
+    )
+    if out is not None:
+        check_ext(out)
+        test_save(out)
+    df = orthologs(query_species, subject_species, release=cfg.release, config=config)
+    if df is None:
+        raise click.ClickException("Can't build databases!")
+    if out is None:
+        out = f"{query_species}-{subject_species}.csv"
+    click.secho(f'writing "{out}"', fg="green")
+    save_df(df, out, index=False)

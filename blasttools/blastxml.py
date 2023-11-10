@@ -17,24 +17,15 @@ from Bio.Blast.Record import Alignment  # type: ignore
 from Bio.Blast.Record import Blast
 from Bio.Blast.Record import HSP
 
+from .blastapi import Blast6
 from .blastapi import BlastConfig
 from .blastapi import check_expr
 from .blastapi import fasta_to_df
-from .blastapi import fetch_seq_df
-from .blastapi import find_best
 from .blastapi import remove_files
-from .blastapi import safe_which
 
 
-class BlastXML:
-    def __init__(self, num_threads: int = 1, blastp: bool = True):
-        self.num_threads = num_threads
-        self.blastp = blastp
-
-    def get_blast(self) -> str:
-        return safe_which("blastp") if self.blastp else safe_which("blastn")
-
-    def runner(self, queryfasta: str, blastdb: str) -> Iterator[Blast]:
+class BlastXML(Blast6):
+    def runner(self, queryfasta: str | Path, blastdb: str | Path) -> Iterator[Blast]:
         outfmt = "5"
         key = uuid4()
         out = f"{key}.xml"
@@ -63,7 +54,7 @@ class BlastXML:
         finally:
             remove_files([out])
 
-    def run(self, queryfasta: str, blastdb: str) -> pd.DataFrame:
+    def run(self, queryfasta: str | Path, blastdb: str | Path) -> pd.DataFrame:
         return pd.DataFrame(
             [asdict(hit) for hit in hits(self.runner(queryfasta, blastdb))],
         )
@@ -215,13 +206,13 @@ def hsp_match(hsp: Hit, width: int = 50, right: int = 0) -> str:
 
 
 def blastxml_to_df(
-    queryfasta: str,
-    blastdb: str,
+    queryfasta: str | Path,
+    blastdb: str | Path,
     num_threads: int = 1,
     blastp: bool = True,
 ) -> pd.DataFrame:
-    bs = BlastXML(num_threads=num_threads, blastp=blastp)
-    return pd.DataFrame([asdict(hit) for hit in hits(bs.runner(queryfasta, blastdb))])
+    bs = BlastXML(HEADER, num_threads=num_threads, blastp=blastp)
+    return bs.run(queryfasta, blastdb)
 
 
 # seem to have --columns='+score gaps nident positive qlen slen'
@@ -231,29 +222,18 @@ def blastall(
     *,
     config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame:
-    if config.expr not in HEADER:
-        check_expr(HEADER, config.expr)  # fail early
-    df = fasta_to_df(queryfasta, with_description=config.with_description)
-    if not df["id"].is_unique:
-        raise click.ClickException(
-            f'sequences IDs are not unique for query file "{queryfasta}"',
-        )
-    res = []
+    b5 = BlastXML(HEADER, num_threads=config.num_threads, blastp=config.blastp)
+    if config.expr not in b5.header:
+        check_expr(b5.header, config.expr)  # fail early
+    qdf = fasta_to_df(
+        queryfasta,
+        with_description=config.with_description,
+        without_query_seq=config.without_query_seq,
+    )
 
-    b5 = BlastXML(num_threads=config.num_threads, blastp=config.blastp)
-    for blastdb in blastdbs:
-        rdf = b5.run(queryfasta, blastdb)
-
-        if config.with_seq and "saccvar" in rdf.columns:
-            saccver = list(rdf["saccvar"])
-            sdf = fetch_seq_df(saccver, blastdb)
-            # sdf.rename(columns={"saccver": "accession"}, inplace=True)
-            rdf = pd.merge(rdf, sdf, left_on="saccvar", right_on="saccvar")
-
-        myrdf = find_best(rdf, df, nevalues=config.best, evalue_col=config.expr)
-        myrdf["blastdb"] = Path(blastdb).name
-        res.append(myrdf)
-
-    ddf = pd.concat(res, axis=0, ignore_index=True)
-
-    return ddf
+    return b5.blastall(
+        qdf,
+        queryfasta,
+        [(Path(db).name, db) for db in blastdbs],
+        config=config,
+    )

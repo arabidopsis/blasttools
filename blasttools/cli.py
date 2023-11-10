@@ -4,11 +4,11 @@ from collections.abc import Sequence
 
 import click
 
+from .blastapi import blast_options
 from .blastapi import blastall
 from .blastapi import BlastConfig
 from .blastapi import buildall
 from .blastapi import check_ext
-from .blastapi import EVALUE
 from .blastapi import merge_fasta
 from .blastapi import read_df
 from .blastapi import save_df
@@ -82,57 +82,42 @@ def build_cmd(
     help="output filename (default is to write <query>.csv)",
     type=click.Path(dir_okay=False),
 )
-@click.option(
-    "-d",
-    "--with-description",
-    is_flag=True,
-    help="include query description",
-)
-@click.option(
-    "--best",
-    default=0,
-    help="best (lowest) evalues [=0 take all] (see also --expr)",
-)
 @click.option("--xml", is_flag=True, help="run with xml output")
-@click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
-@click.option("--with-seq", is_flag=True, help="add sequence data to output")
-@click.option("-t", "--num-threads", help="number of threads to use", default=1)
-@click.option(
-    "--expr",
-    help="expression to minimize",
-    default=EVALUE,
-    show_default=True,
-)
 @click.option(
     "-c",
     "--columns",
     help="space separated list of columns (see columns cmd for a list of valid columns)",
 )
+@click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
+@blast_options
 @click.argument("query", type=click.Path(exists=True, dir_okay=False))
 @click.argument("blastdbs", nargs=-1)
 def blast_cmd(
     query: str,
     blastdbs: Sequence[str],
-    best: int,
-    with_seq: bool,
     out: str | None,
     xml: bool,
     columns: str | None,
-    num_threads: int,
     nucl: bool,
+    # blast options
+    best: int,
+    with_seq: bool,
+    num_threads: int,
     with_description: bool,
     expr: str,
+    without_query_seq: bool,
 ) -> None:
     """Run a blast query over specified databases"""
     from .blastapi import mkheader, has_pdatabase
     from .blastxml import blastall as blastall5
 
+    if len(blastdbs) == 0:
+        return
+
     if out is not None:
         check_ext(out)  # fail early
         test_save(out)
 
-    if len(blastdbs) == 0:
-        return
     blastdbs = toblastdb(blastdbs)
     missing = {b for b in blastdbs if not has_pdatabase(b)}
     if missing:
@@ -156,6 +141,7 @@ def blast_cmd(
         with_description=with_description,
         expr=expr,
         blastp=not nucl,
+        without_query_seq=without_query_seq,
     )
     if xml:
         df = blastall5(query, blastdbs, config=config)
@@ -216,12 +202,18 @@ def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
         odf.to_csv(sys.stdout, index=False)
 
 
-@blast.command(name="split-fasta")
-@click.option("--fmt", help="format of filenames")
+@blast.command(name="fasta-split")
+@click.option("-d", "--directory", type=click.Path(dir_okay=True, file_okay=False))
+@click.option("--fmt", help="format of split filenames")
 @click.argument("fastafile", type=click.Path(dir_okay=False, exists=True))
 @click.argument("batch", type=int)
-def split_cmd(fastafile: str, batch: int, fmt: str | None) -> None:
-    """split a fasta file into batches"""
+def fasta_split_cmd(
+    fastafile: str,
+    batch: int,
+    fmt: str | None,
+    directory: str | None,
+) -> None:
+    """Split a fasta file into batches"""
     from .utils import split_fasta
 
-    split_fasta(fastafile, batch, target_dir=".", fmt=fmt)
+    split_fasta(fastafile, batch, target_dir=directory, fmt=fmt)
