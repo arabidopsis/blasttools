@@ -7,6 +7,7 @@ from dataclasses import asdict
 from dataclasses import dataclass
 from dataclasses import fields
 from pathlib import Path
+from typing import Any
 from typing import Iterator
 from uuid import uuid4
 
@@ -18,13 +19,21 @@ from Bio.Blast.Record import Blast
 from Bio.Blast.Record import HSP
 
 from .blastapi import Blast6
-from .blastapi import BlastConfig
-from .blastapi import check_expr
-from .blastapi import fasta_to_df
 from .blastapi import remove_files
 
 
 class BlastXML(Blast6):
+    def __init__(
+        self,
+        header: Sequence[str] | None = None,
+        num_threads: int = 1,
+        blastp: bool = True,
+    ):
+        if header is None:
+            header = HEADER
+        super().__init__(header, num_threads, blastp)
+        self._h = set(header)
+
     def runner(self, queryfasta: str | Path, blastdb: str | Path) -> Iterator[Blast]:
         outfmt = "5"
         key = uuid4()
@@ -54,9 +63,13 @@ class BlastXML(Blast6):
         finally:
             remove_files([out])
 
+    def todict(self, hit: Hit) -> dict[str, Any]:
+        return {k: v for k, v in asdict(hit).items() if k in self._h}
+
     def run(self, queryfasta: str | Path, blastdb: str | Path) -> pd.DataFrame:
+        todict = self.todict
         return pd.DataFrame(
-            [asdict(hit) for hit in hits(self.runner(queryfasta, blastdb))],
+            [todict(hit) for hit in hits(self.runner(queryfasta, blastdb))],
         )
 
 
@@ -213,27 +226,3 @@ def blastxml_to_df(
 ) -> pd.DataFrame:
     bs = BlastXML(HEADER, num_threads=num_threads, blastp=blastp)
     return bs.run(queryfasta, blastdb)
-
-
-# seem to have --columns='+score gaps nident positive qlen slen'
-def blastall(
-    queryfasta: str,
-    blastdbs: Sequence[str],
-    *,
-    config: BlastConfig = BlastConfig(),
-) -> pd.DataFrame:
-    b5 = BlastXML(HEADER, num_threads=config.num_threads, blastp=config.blastp)
-    if config.expr not in b5.header:
-        check_expr(b5.header, config.expr)  # fail early
-    qdf = fasta_to_df(
-        queryfasta,
-        with_description=config.with_description,
-        without_query_seq=config.without_query_seq,
-    )
-
-    return b5.blastall(
-        qdf,
-        queryfasta,
-        [(Path(db).name, db) for db in blastdbs],
-        config=config,
-    )

@@ -24,7 +24,7 @@ from pandas.errors import UndefinedVariableError
 def safe_which(cmd: str) -> str:
     r = which(cmd)
     if r is None:
-        raise click.ClickException(f'can\'t find application: "{cmd}"')
+        raise click.ClickException(f'can\'t find application: "{cmd}" in PATH')
     return r
 
 
@@ -541,6 +541,7 @@ class BlastConfig:
     expr: str = EVALUE
     blastp: bool = True
     without_query_seq: bool = False
+    xml: bool = False
 
 
 def blast_options(f):
@@ -549,7 +550,7 @@ def blast_options(f):
         is_flag=True,
         help="don't output query sequence",
     )(f)
-
+    f = click.option("--xml", is_flag=True, help="run with xml output (for matches)")(f)
     f = click.option(
         "-t",
         "--num-threads",
@@ -588,9 +589,19 @@ def blastall(
     *,
     config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame:
-    b6 = Blast6(config.header, num_threads=config.num_threads, blastp=config.blastp)
+    from .blastxml import BlastXML
 
-    check_expr(b6.header, config.expr)  # fail early
+    b6: Blast6
+    if config.xml:
+        b6 = BlastXML(
+            config.header,
+            num_threads=config.num_threads,
+            blastp=config.blastp,
+        )
+    else:
+        b6 = Blast6(config.header, num_threads=config.num_threads, blastp=config.blastp)
+    if config.expr not in b6.header:
+        check_expr(b6.header, config.expr)  # fail early
 
     qdf = fasta_to_df(
         queryfasta,

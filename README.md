@@ -8,7 +8,6 @@ Blast against any built blast databases
 blasttools blast --out=my.pkl my.fasta my_blastdbs_dir/*.pot
 ```
 
-
 ## Install
 
 Install with
@@ -77,7 +76,9 @@ Then gather them all together...
 
 ```sh
 blasttools concat --out=alldone.xlsx my*.pkl && rm my*.pkl
- ```
+```
+
+or programmatically:
 
 ```python
 from glob import glob
@@ -100,7 +101,11 @@ then you can add `--expr='qstart - qend'`. (Remember we are looking for the lowe
 Blast offers an xml (`--xml`) output format that adds `query`, `match`, `sbjct` strings. The other
 fields are equivalent to adding `--columns='+score gaps nident positive qlen slen'`.
 
+It also offers a way to display the blast match as a text chart.
+
 ```python
 from blasttools.blastxml import hsp_match
+df = pd.read_csv('results.csv')
 df['display'] = df.apply(hsp_match, axis=1)
+print(df.iloc[0].display)
 ```

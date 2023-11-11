@@ -31,8 +31,8 @@ ENSEMBL = f"ftp://{FTPURL}/" + PEP_DIR + "/{file}"
 SPECIES_TSV = "species_EnsemblPlants.txt"
 
 
-def blast_dir(release: int) -> Path:
-    return Path(f"ensemblblast-{release}")
+def blast_dir(release: int, *, kingdom: str = "plants") -> Path:
+    return Path(f"ensembl{kingdom}-{release}")
 
 
 @dataclass
@@ -252,9 +252,19 @@ def blastall(
     path: str | None = None,
     config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame:
-    b6 = Blast6(config.header, num_threads=config.num_threads, blastp=config.blastp)
+    from .blastxml import BlastXML
 
-    check_expr(b6.header, config.expr)  # fail early
+    b6: Blast6
+    if config.xml:
+        b6 = BlastXML(
+            config.header,
+            num_threads=config.num_threads,
+            blastp=config.blastp,
+        )
+    else:
+        b6 = Blast6(config.header, num_threads=config.num_threads, blastp=config.blastp)
+    if config.expr not in b6.header:
+        check_expr(b6.header, config.expr)  # fail early
 
     qdf = fasta_to_df(
         queryfasta,
@@ -308,6 +318,7 @@ def orthologs(
     query_species: str,
     subject_species: str,
     release: int,
+    *,
     config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame | None:
     query_fasta = ensure_fasta(query_species, release)
@@ -320,9 +331,15 @@ def orthologs2(
     query_fasta: str | Path,
     subject_species: str,
     release: int,
+    *,
     config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame | None:
     if not build([subject_species], release):
         return None
 
-    return blastall(query_fasta, [subject_species], release=release, config=config)
+    return blastall(
+        query_fasta,
+        [subject_species],
+        release=release,
+        config=config,
+    )

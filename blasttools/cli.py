@@ -83,7 +83,6 @@ def build_cmd(
     help="output filename (default is to write <query>.csv)",
     type=click.Path(dir_okay=False),
 )
-@click.option("--xml", is_flag=True, help="run with xml output")
 @click.option(
     "-c",
     "--columns",
@@ -110,7 +109,6 @@ def blast_cmd(
 ) -> None:
     """Run a blast query over specified databases"""
     from .blastapi import mkheader, has_pdatabase
-    from .blastxml import blastall as blastall5
 
     if len(blastdbs) == 0:
         return
@@ -143,11 +141,10 @@ def blast_cmd(
         expr=expr,
         blastp=not nucl,
         without_query_seq=without_query_seq,
+        xml=xml,
     )
-    if xml:
-        df = blastall5(query, blastdbs, config=config)
-    else:
-        df = blastall(query, blastdbs, config=config)
+
+    df = blastall(query, blastdbs, config=config)
     if out is None:
         out = query + ".csv"
     click.secho(f"writing {out}", fg="green")

@@ -116,6 +116,7 @@ def blast_cmd(
     with_description: bool,
     expr: str,
     without_query_seq: bool,
+    xml: bool,
 ) -> None:
     """Run blast on query fasta file"""
     from .plants import available_species
@@ -129,6 +130,11 @@ def blast_cmd(
 
     myheader = None
     if columns is not None:
+        if xml:
+            raise click.BadParameter(
+                'Can\'t have "--columns" with "--xml"',
+                param_hint="xml",
+            )
         myheader = mkheader(columns)
 
     if all_db:
@@ -143,6 +149,7 @@ def blast_cmd(
         with_description=with_description,
         expr=expr,
         without_query_seq=without_query_seq,
+        xml=xml,
     )
     df = blastall(query, species, release=cfg.release, path=builddir, config=config)
     if out is None:
@@ -161,11 +168,15 @@ def fasta_fetch_cmd(cfg: Config, species: Sequence[str]) -> None:
     fetch_fastas(species, release=cfg.release)
 
 
-@plants.command()
+@plants.command("fasta-filenames")
 @click.option("-f", "--full", is_flag=True, help="show full URL to file")
 @click.argument("species", nargs=-1)
 @pass_config
-def fasta_filenames(cfg: Config, species: Sequence[str], full: bool) -> None:
+def fasta_filenames_cmd(
+    cfg: Config,
+    species: Sequence[str],
+    full: bool,
+) -> None:
     """Find fasta filenames for plant species"""
     from .plants import ENSEMBL
 
@@ -214,6 +225,7 @@ def ortholog_cmd(
     with_description: bool,
     expr: str,
     without_query_seq: bool,
+    xml: bool,
 ) -> None:
     """Create an ortholog DataFrame between two species"""
     config = BlastConfig(
@@ -224,11 +236,17 @@ def ortholog_cmd(
         with_description=with_description,
         expr=expr,
         without_query_seq=without_query_seq,
+        xml=xml,
     )
     if out is not None:
         check_ext(out)
         test_save(out)
-    df = orthologs(query_species, subject_species, release=cfg.release, config=config)
+    df = orthologs(
+        query_species,
+        subject_species,
+        release=cfg.release,
+        config=config,
+    )
     if df is None:
         raise click.ClickException("Can't build databases!")
     if out is None:
