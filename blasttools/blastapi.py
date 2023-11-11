@@ -44,6 +44,14 @@ def has_pdatabase(path: str) -> bool:
     return Path(path).exists()
 
 
+def get_cat(filename: Path) -> list[str]:
+    if filename.name.endswith(".gz"):
+        return [safe_which("gunzip"), "--stdout"]
+    if filename.name.endswith(".bz2"):
+        return [safe_which("bzcat")]
+    return [safe_which("cat")]
+
+
 def fasta_to_df(
     path: str | Path,
     with_description: bool = False,
@@ -78,14 +86,12 @@ class BlastDb:
         out = self.database.name
         fastafile = Path(fastafile)
         title = fastafile.name
+        cat_cmd = get_cat(fastafile)
+        cat_cmd.append(fastafile.name)
 
-        if fastafile.name.endswith(".gz"):
-            cmd = [safe_which("gunzip"), "--stdout", fastafile.name]
-        else:
-            cmd = [safe_which("cat"), fastafile.name]
         # -parse_seqids so that we can get sequences out from ids with blastdbcmd
         with subprocess.Popen(
-            cmd,
+            cat_cmd,
             stdout=subprocess.PIPE,
             cwd=str(fastafile.parent),
         ) as p1:
@@ -120,7 +126,6 @@ class BlastDb:
 # or http://scikit-bio.org/docs/0.5.4/generated/skbio.io.format.blast6.html
 # https://www.ncbi.nlm.nih.gov/books/NBK279684/ seems out of date
 # default header for -outfmt 6
-# with added 'gaps'
 HEADER = (
     "qaccver",
     "saccver",
@@ -173,7 +178,7 @@ class Blast6:
     def get_blast(self) -> str:
         return safe_which("blastp") if self.blastp else safe_which("blastn")
 
-    def run(
+    def run_old(
         self,
         queryfasta: str | Path,
         blastdb: str | Path,
@@ -222,12 +227,58 @@ class Blast6:
                 sdf = fetch_seq_df(saccver, blastdb)
                 rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
-            myrdf = find_best(rdf, qdf, nevalues=config.best, evalue_col=config.expr)
+            myrdf = find_bestx(rdf, qdf, nevalues=config.best, evalue_col=config.expr)
             myrdf["species"] = species
             res.append(myrdf)
         ddf = pd.concat(res, axis=0, ignore_index=True)
 
         return ddf
+
+    def run(
+        self,
+        queryfasta: str | Path,
+        blastdb: str | Path,
+    ) -> pd.DataFrame:
+        blast = self.get_blast()
+        outfmt = f'6 {" ".join(self.header)}'
+        out = f"{uuid4()}.tsv"
+        queryfasta = Path(queryfasta)
+        cmd = get_cat(queryfasta)
+        cmd.append(queryfasta.name)
+
+        try:
+            with subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                cwd=str(queryfasta.parent),
+            ) as p1:
+                with subprocess.Popen(
+                    [
+                        blast,
+                        "-outfmt",
+                        outfmt,
+                        "-query",
+                        "-",
+                        "-db",
+                        str(blastdb),
+                        "-out",
+                        out,
+                        "-num_threads",
+                        str(self.num_threads),
+                    ],
+                    stdin=p1.stdout,
+                ) as p2:
+                    if p1.stdout:
+                        p1.stdout.close()
+                    p2.wait()
+                    p1.wait()
+
+                    if p2.returncode:
+                        b = "blastp" if self.blastp else "blastn"
+                        raise click.ClickException(f"Can't run {b} using {queryfasta}")
+                    return out6_to_df(out, self.header)
+        finally:
+            remove_files([out])
 
 
 def out6_to_df(tsvfile: str, header: Sequence[str] = HEADER) -> pd.DataFrame:
@@ -345,34 +396,50 @@ TMP_EVAL_COL = "__xxxx__"
 
 def find_best(
     blast_df: pd.DataFrame,
-    query_df: pd.DataFrame,
     nevalues: int = 2,
     evalue_col: str = EVALUE,  # or qstart - qend + mismatch
-    id_col: str = QUERY,
-    query_id_col: str = "id",
+    group_by_col: str = QUERY,
 ) -> pd.DataFrame:
+    if nevalues <= 0:
+        return blast_df
     if evalue_col not in blast_df:
         blast_df[TMP_EVAL_COL] = blast_df.eval(
             evalue_col,
         )  # expression like 'qstart - qend'
         evalue_col = TMP_EVAL_COL
-    if nevalues > 0:
-        r = (
-            blast_df.groupby(id_col)[evalue_col]
-            .nsmallest(nevalues)
-            .reset_index(level=0)
-        )
-        myrdf = blast_df.loc[r.index].sort_values(
-            [id_col, evalue_col],
-            ascending=[True, True],
-        )
-    else:
-        myrdf = blast_df.sort_values([id_col, evalue_col], ascending=[True, True])
-    myrdf = pd.merge(myrdf, query_df, left_on=id_col, right_on=query_id_col)
-    todrop = [query_id_col]
+
+    r = (
+        blast_df.groupby(group_by_col)[evalue_col]
+        .nsmallest(nevalues)
+        .reset_index(level=0)
+    )
+    myrdf = blast_df.loc[r.index].sort_values(
+        [group_by_col, evalue_col],
+        ascending=[True, True],
+    )
+
     if TMP_EVAL_COL in myrdf:
-        todrop.append(TMP_EVAL_COL)
-    myrdf.drop(columns=todrop, inplace=True)
+        myrdf.drop(columns=[TMP_EVAL_COL], inplace=True)
+    return myrdf
+
+
+def find_bestx(
+    blast_df: pd.DataFrame,
+    query_df: pd.DataFrame,
+    nevalues: int = 2,
+    evalue_col: str = EVALUE,  # or qstart - qend + mismatch
+    group_by_col: str = QUERY,
+    query_id_col: str = "id",
+) -> pd.DataFrame:
+    myrdf = find_best(
+        blast_df,
+        nevalues,
+        evalue_col=evalue_col,
+        group_by_col=group_by_col,
+    )
+    myrdf = pd.merge(myrdf, query_df, left_on=group_by_col, right_on=query_id_col)
+    if group_by_col != query_id_col:
+        myrdf.drop(columns=[query_id_col], inplace=True)
     return myrdf
 
 
@@ -533,15 +600,22 @@ def check_expr(headers: Sequence[str], expr: str) -> None:
 @dataclass
 class BlastConfig:
     best: int = 0
+    """retain only n `best` sequences according to `expr`"""
     with_seq: bool = False
+    """put subject sequence into resulting dataframe (as subject_seq)"""
     header: Sequence[str] | None = None
+    """Blast columns to generate"""
     # path: str | None = None
     num_threads: int = 1
     with_description: bool = True
+    """add query description field (from fasta)"""
     expr: str = EVALUE
+    """expression or column that defines 'best' (i.e. lowest) blast hit"""
     blastp: bool = True
     without_query_seq: bool = False
+    """don't retain query sequence column (as seq)"""
     xml: bool = False
+    """Use blast xml output to obtain match, query, sbjct sequences"""
 
 
 def blast_options(f):
@@ -574,7 +648,6 @@ def blast_options(f):
         is_flag=True,
         help="add subject sequence data to output",
     )(f)
-
     f = click.option(
         "--best",
         default=0,
@@ -663,7 +736,7 @@ def buildall(
 def list_out(it: Iterator[Any], *, use_null: bool = False) -> None:
     if not use_null:
         for path in it:
-            click.echo(str(it))
+            click.echo(str(path))
     else:
         for i, path in enumerate(it):
             if i != 0:

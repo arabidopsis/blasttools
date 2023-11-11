@@ -81,7 +81,7 @@ def out5_to_df(xmlfile: str) -> pd.DataFrame:
     return pd.DataFrame([asdict(hit) for hit in hits(run())])
 
 
-GAPS = re.compile("[-]+")
+GAPS = re.compile("[-]+").finditer
 
 
 @dataclass
@@ -94,14 +94,14 @@ class Hit:
     bitscore: float
     score: float
     evalue: float
-    nident: int  #
+    nident: int
     positive: int
     gaps: int
-    match: str
-    query: str
+    match: str  # not in 6
+    query: str  # not in 6
     qstart: int
     qend: int
-    sbjct: str
+    sbjct: str  # not in 6
     sstart: int
     send: int
     gapopen: int
@@ -131,10 +131,8 @@ def pident(hsp: HSP) -> float:
 
 
 def gapopen(hsp: HSP) -> int:
-    # sbjct.str.count("[-]+") + query.count("[-]+")
-    return sum(1 for _ in (GAPS.finditer(hsp.sbjct))) + sum(
-        1 for _ in (GAPS.finditer(hsp.query))
-    )
+    # sbjct.str.count("[-]+") + query.str.count("[-]+")
+    return sum(1 for _ in GAPS(hsp.sbjct)) + sum(1 for _ in GAPS(hsp.query))
 
 
 def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
