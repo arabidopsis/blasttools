@@ -9,6 +9,7 @@ from .blastapi import blastall
 from .blastapi import BlastConfig
 from .blastapi import buildall
 from .blastapi import check_ext
+from .blastapi import list_out
 from .blastapi import merge_fasta
 from .blastapi import read_df
 from .blastapi import save_df
@@ -195,7 +196,7 @@ def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
             continue
         dfs.append(res)
 
-    odf = pd.concat(dfs, axis=0)
+    odf = pd.concat(dfs, axis=0, ignore_index=True)
     if out is not None:
         save_df(odf, out)
     else:
@@ -203,8 +204,20 @@ def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
 
 
 @blast.command(name="fasta-split")
-@click.option("-d", "--directory", type=click.Path(dir_okay=True, file_okay=False))
-@click.option("--fmt", help="format of split filenames")
+@click.option(
+    "-d",
+    "--directory",
+    type=click.Path(dir_okay=True, file_okay=False),
+    help="directory to write split fastas",
+)
+@click.option(
+    "-Z",
+    "--Z",
+    "use_null",
+    is_flag=True,
+    help="separate filenames by '\\0' in output",
+)
+@click.option("--fmt", help="format of split filenames. Must have a {num} key.")
 @click.argument("fastafile", type=click.Path(dir_okay=False, exists=True))
 @click.argument("batch", type=int)
 def fasta_split_cmd(
@@ -212,8 +225,16 @@ def fasta_split_cmd(
     batch: int,
     fmt: str | None,
     directory: str | None,
+    use_null: bool,
 ) -> None:
     """Split a fasta file into batches"""
     from .utils import split_fasta
 
-    split_fasta(fastafile, batch, target_dir=directory, fmt=fmt)
+    ret = split_fasta(fastafile, batch, target_dir=directory, fmt=fmt)
+    if ret is None:
+        raise click.ClickException(f"Can't split fasta file {fastafile}")
+    # So you can do say:
+    # fastas=$(blasttools fasta-split fastafile.fa.gz 20000)
+    # parallel blasttools blast --out=my{}.pkl ::: $fastas ::: blastdb
+    # blasttools concat --out=final.csv my*.pkl && rm my*.pkl
+    list_out((p.resolve() for p in ret), use_null=use_null)

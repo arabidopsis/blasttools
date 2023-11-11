@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from shutil import which
+from typing import Any
 from typing import Iterator
 from typing import Sequence
 from uuid import uuid4
@@ -384,16 +385,7 @@ def fetch_seq_df(seqids: Sequence[str], database: str | Path) -> pd.DataFrame:
     )
 
 
-OKEXT = {
-    "csv",
-    "xlsx",
-    "feather",
-    "parquet",
-    "pkl",
-    "pickle",
-    "hdf",
-    "h5",
-}
+OKEXT = {"csv", "xlsx", "feather", "parquet", "pkl", "pickle", "hdf", "h5", "hd5"}
 
 
 def get_ext(filename: Path) -> str | None:
@@ -505,7 +497,7 @@ def read_df(
     if ext is None:
         return None
 
-    elif ext == "xlsx":
+    if ext == "xlsx":
         return pd.read_excel(filename)
     elif ext == "feather":
         return pd.read_feather(filename)
@@ -513,7 +505,7 @@ def read_df(
         return pd.read_parquet(filename)
     elif ext in {"pkl", "pickle"}:
         return pd.read_pickle(filename)
-    elif ext in {"hdf", "h5"}:
+    elif ext in {"hdf", "h5", "hd5"}:
         return pd.read_hdf(filename, key)  # type: ignore
 
     # if ext == "csv":
@@ -655,3 +647,14 @@ def buildall(
     finally:
         if out:
             remove_files([out])
+
+
+def list_out(it: Iterator[Any], *, use_null: bool = False) -> None:
+    if not use_null:
+        for path in it:
+            click.echo(str(it))
+    else:
+        for i, path in enumerate(it):
+            if i != 0:
+                click.echo("\0", nl=False)
+            click.echo(str(path), nl=False)

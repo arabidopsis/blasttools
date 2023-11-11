@@ -151,9 +151,9 @@ def fetch_seq_df(
 def find_species(release: int) -> list[str]:
     from .config import FTP_TIMEOUT
 
-    df = find_species_file(release, quiet=True)
+    df = get_available_species(release, quiet=True)
     if df is not None:
-        return df["species"].to_list()
+        return df["#name"].to_list()
 
     with ftplib.FTP(FTPURL, timeout=FTP_TIMEOUT) as ftp:
         ftp.login()
@@ -161,7 +161,7 @@ def find_species(release: int) -> list[str]:
         return list(ftp.nlst())
 
 
-def find_species_file(release: int, *, quiet: bool = False) -> pd.DataFrame | None:
+def get_available_species(release: int, *, quiet: bool = False) -> pd.DataFrame | None:
     bd = blast_dir(release)
     sfile = bd / SPECIES_TSV
     if sfile.exists():
@@ -310,7 +310,6 @@ def orthologs(
     release: int,
     config: BlastConfig = BlastConfig(),
 ) -> pd.DataFrame | None:
-
     query_fasta = ensure_fasta(query_species, release)
     if query_fasta is None:
         return None

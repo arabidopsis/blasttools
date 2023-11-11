@@ -2,6 +2,15 @@
 
 Command for turning blast queries into pandas dataframes.
 
+Blast against any built blast databases
+
+```sh
+blasttools blast --out=my.pkl my.fasta my_blastdbs_dir/*.pot
+```
+
+
+## Install
+
 Install with
 
 ```sh
@@ -42,8 +51,12 @@ df = pd.read_pickle('dataframe.pkl')
 
 When blasting, you can specify `--num-threads` which is passed directly to the
 underlying blast command. If you want to parallelize over species, databases or fasta files,
-I suggest you use [GNU Parallel](https://www.gnu.org/software/parallel/) [[Tutorial](https://blog.ronin.cloud/gnu-parallel/)]
-e.g. build blast databases concurrently:
+I suggest you use [GNU Parallel](https://www.gnu.org/software/parallel/) [[Tutorial](https://blog.ronin.cloud/gnu-parallel/)].
+
+`parallel` has a much better set of options for controlling how the parallelization works
+and is also quite simple for simple things.
+
+e.g. build blast databases from a set of fasta files concurrently:
 
 ```sh
 parallel blasttools build ::: *.fa.gz
@@ -60,7 +73,11 @@ parallel blasttools plants blast --out=my{}.pkl my.fasta ::: $species
 parallel -N4 blasttools plants blast --out='my{#}.pkl' my.fasta ::: $species
 ```
 
-Then gather them together...
+Then gather them all together...
+
+```sh
+blasttools concat --out=alldone.xlsx my*.pkl && rm my*.pkl
+ ```
 
 ```python
 from glob import glob
