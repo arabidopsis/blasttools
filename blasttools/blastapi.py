@@ -243,12 +243,12 @@ class Blast6:
         outfmt = f'6 {" ".join(self.header)}'
         out = f"{uuid4()}.tsv"
         queryfasta = Path(queryfasta)
-        cmd = get_cat(queryfasta)
-        cmd.append(queryfasta.name)
+        cat_cmd = get_cat(queryfasta)
+        cat_cmd.append(queryfasta.name)
 
         try:
             with subprocess.Popen(
-                cmd,
+                cat_cmd,
                 stdout=subprocess.PIPE,
                 cwd=str(queryfasta.parent),
             ) as p1:

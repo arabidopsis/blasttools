@@ -19,6 +19,7 @@ from Bio.Blast.Record import Blast
 from Bio.Blast.Record import HSP
 
 from .blastapi import Blast6
+from .blastapi import get_cat
 from .blastapi import remove_files
 
 
@@ -34,32 +35,52 @@ class BlastXML(Blast6):
         super().__init__(header, num_threads, blastp)
         self._h = set(header)
 
-    def runner(self, queryfasta: str | Path, blastdb: str | Path) -> Iterator[Blast]:
+    def runner(
+        self,
+        queryfasta: str | Path,
+        blastdb: str | Path,
+    ) -> Iterator[Blast]:
         outfmt = "5"
         key = uuid4()
         out = f"{key}.xml"
         blast = self.get_blast()
+
+        queryfasta = Path(queryfasta)
+        cat_cmd = get_cat(queryfasta)
+        cat_cmd.append(queryfasta.name)
+
         try:
-            r = subprocess.run(
-                [
-                    blast,
-                    "-outfmt",
-                    outfmt,
-                    "-query",
-                    queryfasta,
-                    "-db",
-                    blastdb,
-                    "-out",
-                    out,
-                    "-num_threads",
-                    str(self.num_threads),
-                ],
-                check=False,
-            )
-            if r.returncode:
-                raise click.ClickException(f"Can't blast {queryfasta}")
-            with open(out, encoding="utf-8") as fp:
-                yield from parse(fp)
+            with subprocess.Popen(
+                cat_cmd,
+                stdout=subprocess.PIPE,
+                cwd=str(queryfasta.parent),
+            ) as p1:
+                with subprocess.Popen(
+                    [
+                        blast,
+                        "-outfmt",
+                        outfmt,
+                        "-query",
+                        "-",
+                        "-db",
+                        str(blastdb),
+                        "-out",
+                        out,
+                        "-num_threads",
+                        str(self.num_threads),
+                    ],
+                    stdin=p1.stdout,
+                ) as p2:
+                    if p1.stdout:
+                        p1.stdout.close()
+                    p2.wait()
+                    p1.wait()
+
+                    if p2.returncode:
+                        b = "blastp" if self.blastp else "blastn"
+                        raise click.ClickException(f"Can't run {b} using {queryfasta}")
+                with open(out, encoding="utf-8") as fp:
+                    yield from parse(fp)
         finally:
             remove_files([out])
 
@@ -139,11 +160,12 @@ def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
     for b, a, h in unwind(xml):
         # b.query is the full line in the query fasta
         # actually <query-def>
-        queryid = b.query.split(None, 1)[0] if not full else b.query
+        queryid = b.query.split(None, maxsplit=1)[0] if not full else b.query
+
         yield Hit(
             qaccver=queryid,
             qlen=b.query_length,
-            saccver=a.accession,
+            saccver=a.accession,  # undocumented? (see set_hit_accession in Bio/Blast/NCBIXML.py)
             slen=a.length,
             length=h.align_length,  # alignment length
             bitscore=h.bits,

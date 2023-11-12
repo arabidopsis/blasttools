@@ -28,8 +28,17 @@ class Config:
 
 pass_config = click.make_pass_decorator(Config, ensure=True)
 
+EPILOG = """
+Fasta files and blast databases files are identified by their species name (see `blasttools plants species`).
+All files are stored in subdirectories identified by the `--release` number.
+e.g. `ensemblplants-{release}/`. Fasta files are downloaded from "ftp://ftp.ebi.ac.uk" as needed.
+"""
 
-@blast.group(help=click.style("blast commands that understand Ensembl", fg="magenta"))
+
+@blast.group(
+    help=click.style("blast commands that understand Ensembl", fg="magenta"),
+    epilog=EPILOG,
+)
 @click.option(
     "-r",
     "--release",
