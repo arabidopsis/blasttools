@@ -156,11 +156,17 @@ def gapopen(hsp: HSP) -> int:
     return sum(1 for _ in GAPS(hsp.sbjct)) + sum(1 for _ in GAPS(hsp.query))
 
 
+def gaps(hsp: HSP) -> int:
+    # same as hsp.gaps
+    return hsp.sbjct.count("-") + hsp.query.count("-")
+
+
 def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
     for b, a, h in unwind(xml):
         # b.query is the full line in the query fasta
         # actually <query-def>
         queryid = b.query.split(None, maxsplit=1)[0] if not full else b.query
+        # assert h.gaps == gaps(h)
 
         yield Hit(
             qaccver=queryid,

@@ -227,7 +227,7 @@ class Blast6:
                 sdf = fetch_seq_df(saccver, blastdb)
                 rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
-            myrdf = find_bestx(rdf, qdf, nevalues=config.best, evalue_col=config.expr)
+            myrdf = find_bestx(rdf, qdf, nbest=config.best, expr=config.expr)
             myrdf["species"] = species
             res.append(myrdf)
         ddf = pd.concat(res, axis=0, ignore_index=True)
@@ -396,29 +396,30 @@ TMP_EVAL_COL = "__xxxx__"
 
 def find_best(
     blast_df: pd.DataFrame,
-    nevalues: int = 2,
-    evalue_col: str = EVALUE,  # or qstart - qend + mismatch
+    nbest: int = 2,
+    expr: str = EVALUE,  # or qstart - qend + mismatch
     group_by_col: str = QUERY,
 ) -> pd.DataFrame:
-    if nevalues <= 0:
+    if nbest <= 0:
         return blast_df
-    if evalue_col not in blast_df:
+    if expr not in blast_df:
         blast_df[TMP_EVAL_COL] = blast_df.eval(
-            evalue_col,
+            expr,
         )  # expression like 'qstart - qend'
-        evalue_col = TMP_EVAL_COL
+        expr = TMP_EVAL_COL
 
     r = (
-        blast_df.groupby(group_by_col)[evalue_col]
-        .nsmallest(nevalues)
+        blast_df[[group_by_col, expr]]
+        .groupby(group_by_col)[expr]
+        .nsmallest(nbest)
         .reset_index(level=0)
     )
     myrdf = blast_df.loc[r.index].sort_values(
-        [group_by_col, evalue_col],
+        [group_by_col, expr],
         ascending=[True, True],
     )
 
-    if TMP_EVAL_COL in myrdf:
+    if TMP_EVAL_COL in myrdf.columns:
         myrdf.drop(columns=[TMP_EVAL_COL], inplace=True)
     return myrdf
 
@@ -426,15 +427,15 @@ def find_best(
 def find_bestx(
     blast_df: pd.DataFrame,
     query_df: pd.DataFrame,
-    nevalues: int = 2,
-    evalue_col: str = EVALUE,  # or qstart - qend + mismatch
+    nbest: int = 2,
+    expr: str = EVALUE,  # or qstart - qend + mismatch
     group_by_col: str = QUERY,
     query_id_col: str = "id",
 ) -> pd.DataFrame:
     myrdf = find_best(
         blast_df,
-        nevalues,
-        evalue_col=evalue_col,
+        nbest,
+        expr=expr,
         group_by_col=group_by_col,
     )
     myrdf = pd.merge(myrdf, query_df, left_on=group_by_col, right_on=query_id_col)
