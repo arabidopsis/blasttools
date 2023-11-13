@@ -35,14 +35,16 @@ class BlastXML(Blast6):
         super().__init__(header, num_threads, blastp)
         self._h = set(header)
 
+    def get_output(self) -> str:
+        return f"{uuid4()}.xml"
+
     def runner(
         self,
         queryfasta: str | Path,
         blastdb: str | Path,
     ) -> Iterator[Blast]:
         outfmt = "5"
-        key = uuid4()
-        out = f"{key}.xml"
+        out = self.get_output()
         blast = self.get_blast()
 
         queryfasta = Path(queryfasta)

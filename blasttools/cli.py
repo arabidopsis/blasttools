@@ -9,8 +9,9 @@ from .blastapi import blastall
 from .blastapi import BlastConfig
 from .blastapi import buildall
 from .blastapi import check_ext
+from .blastapi import fasta_merge
+from .blastapi import fasta_xref
 from .blastapi import list_out
-from .blastapi import merge_fasta
 from .blastapi import read_df
 from .blastapi import save_df
 from .blastapi import test_save
@@ -43,9 +44,31 @@ def update() -> None:
 @click.argument("fasta1", type=click.Path(exists=True, dir_okay=False))
 @click.argument("fasta2", type=click.Path(exists=True, dir_okay=False))
 @click.argument("outfasta", type=click.Path(exists=False, dir_okay=False))
-def merge_fasta_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
+def fasta_merge_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
     """merge 2 fasta files based on sequence identity"""
-    merge_fasta(fasta1, fasta2, outfasta)
+    fasta_merge(fasta1, fasta2, outfasta)
+
+
+@blast.command(name="fasta-xref")
+@click.option(
+    "--out",
+    help="output filename (default is to write CSV to stdout)",
+    type=click.Path(dir_okay=False),
+)
+@click.argument("fasta1", type=click.Path(exists=True, dir_okay=False))
+@click.argument("fasta2", type=click.Path(exists=True, dir_okay=False))
+def fasta_xref_cmd(fasta1: str, fasta2: str, out: str | None) -> None:
+    """match IDs based on sequence identity"""
+    import sys
+
+    if out is not None:
+        test_save(out)
+    df = fasta_xref(fasta1, fasta2)
+
+    if out is not None:
+        save_df(df, out)
+    else:
+        df.to_csv(sys.stdout, index=False)
 
 
 @blast.command(name="build")
@@ -86,7 +109,7 @@ def build_cmd(
 @click.option(
     "-c",
     "--columns",
-    help="space separated list of columns (see columns cmd for a list of valid columns)",
+    help="space or comma separated list of columns (see columns cmd for a list of valid columns)",
 )
 @click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
 @blast_options

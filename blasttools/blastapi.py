@@ -151,7 +151,13 @@ def mkheader(header: str) -> Sequence[str]:
     add = header.startswith("+")
     sub = header.startswith("-")
     h = header[1:] if add or sub else header
-    hl = h.strip().split()
+
+    hl = []
+    for v in h.strip().split():
+        if "," in v:
+            hl.extend([s.strip() for s in v.split(",")])
+        else:
+            hl.append(v)
     if sub:
         hl = [h for h in HEADER if h not in hl]
     elif add:
@@ -234,6 +240,9 @@ class Blast6:
 
         return ddf
 
+    def get_output(self) -> str:
+        return f"{uuid4()}.tsv"
+
     def run(
         self,
         queryfasta: str | Path,
@@ -241,7 +250,7 @@ class Blast6:
     ) -> pd.DataFrame:
         blast = self.get_blast()
         outfmt = f'6 {" ".join(self.header)}'
-        out = f"{uuid4()}.tsv"
+        out = self.get_output()
         queryfasta = Path(queryfasta)
         cat_cmd = get_cat(queryfasta)
         cat_cmd.append(queryfasta.name)
@@ -340,7 +349,25 @@ def fetch_seq(seqids: Sequence[str], blastdb: str | Path) -> Iterator[SeqRecord]
         remove_files([seqfile, out])
 
 
-def merge_fasta(
+def fasta_xref(fasta1: str, fasta2: str, fillna: str = "_") -> pd.DataFrame:
+    df1 = fasta_to_df(fasta1, with_description=False)
+    df2 = fasta_to_df(fasta2, with_description=False)
+
+    df = pd.merge(
+        df1,
+        df2,
+        how="outer",
+        left_on="seq",
+        right_on="seq",
+        suffixes=("", "_1"),
+    )
+    df = df.fillna(fillna)
+    df = df[["id", "id_1"]]
+    df.rename(columns={"id_1": "other"}, inplace=True)
+    return df
+
+
+def fasta_merge(
     fasta1: str,
     fasta2: str,
     out: str,
@@ -526,6 +553,8 @@ def save_df(
     key: str = "blast",
 ) -> None:
     filename = Path(filename)
+    if not filename.parent.exists():
+        filename.parent.mkdir(parents=True, exist_ok=True)
     ext = get_ext(filename)
     if ext is None:
         ext = default

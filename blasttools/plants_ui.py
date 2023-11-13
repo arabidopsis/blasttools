@@ -89,7 +89,8 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
 @click.option(
     "-c",
     "--columns",
-    help="space separated list of columns (see columns cmd for a list of valid columns)",
+    help="space or comma separated list of columns (see columns cmd for a list of valid columns)."
+    "Prefix with a '+' to add the columns or '-' to remove them",
 )
 @click.option(
     "-a",
