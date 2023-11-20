@@ -427,21 +427,27 @@ def find_best(
     expr: str = EVALUE,  # or qstart - qend + mismatch
     group_by_col: str = QUERY,
 ) -> pd.DataFrame:
-    if nbest <= 0:
-        return blast_df
     if expr not in blast_df:
         blast_df[TMP_EVAL_COL] = blast_df.eval(
             expr,
         )  # expression like 'qstart - qend'
         expr = TMP_EVAL_COL
+    if blast_df[expr].dtype.kind == "b":
+        # if its a boolean expression the just filter
+        myrdf = blast_df[blast_df[expr]]
+    else:
+        if nbest > 0:
+            r = (
+                blast_df[[group_by_col, expr]]
+                .groupby(group_by_col)[expr]
+                .nsmallest(nbest)
+                .reset_index(level=0)
+            )
+            myrdf = blast_df.loc[r.index]
+        else:
+            myrdf = blast_df
 
-    r = (
-        blast_df[[group_by_col, expr]]
-        .groupby(group_by_col)[expr]
-        .nsmallest(nbest)
-        .reset_index(level=0)
-    )
-    myrdf = blast_df.loc[r.index].sort_values(
+    myrdf = myrdf.sort_values(
         [group_by_col, expr],
         ascending=[True, True],
     )
