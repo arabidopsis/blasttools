@@ -161,7 +161,11 @@ def mkheader(header: str) -> Sequence[str]:
     if sub:
         hl = [h for h in HEADER if h not in hl]
     elif add:
-        hl = list(HEADER) + [h for h in hl if h not in HEADER]
+        _hl = list(HEADER)
+        for h in hl:
+            if h not in _hl:  # remove duplicates
+                _hl.append(h)
+        hl = _hl
     unknown = set(hl) - set(VALID)
     if unknown:
         raise click.ClickException(f"unknown headers \"{' '.join(unknown)}\"")

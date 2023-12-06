@@ -169,11 +169,13 @@ def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
         # actually <query-def>
         queryid = b.query.split(None, maxsplit=1)[0] if not full else b.query
         # assert h.gaps == gaps(h)
-
+        # a.hit_id == sseqid == a.accession
+        # undocumented? (see set_hit_accession in Bio/Blast/NCBIXML.py)
+        # assert a.hit_id == a.accession, (a.hit_id, a.accession)
         yield Hit(
             qaccver=queryid,
             qlen=b.query_length,
-            saccver=a.accession,  # undocumented? (see set_hit_accession in Bio/Blast/NCBIXML.py)
+            saccver=a.accession,
             slen=a.length,
             length=h.align_length,  # alignment length
             bitscore=h.bits,

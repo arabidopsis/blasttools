@@ -2,6 +2,9 @@
 # taken from `blastp -help` output
 from __future__ import annotations
 
+# in normal blasting
+# saccver == sseqid == sacc
+# qaccver == qseqid == qacc
 VALID = {
     "qseqid": "Query Seq-id",
     "qgi": "Query GI",
