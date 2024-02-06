@@ -121,7 +121,7 @@ def blast_cmd(
     all_db: bool,
     # blast options
     best: int,
-    with_seq: bool,
+    with_subject_seq: bool,
     num_threads: int,
     with_description: bool,
     expr: str,
@@ -153,7 +153,7 @@ def blast_cmd(
             return
     config = BlastConfig(
         best=best,
-        with_seq=with_seq,
+        with_subject_seq=with_subject_seq,
         header=myheader,
         num_threads=num_threads,
         with_description=with_description,
@@ -243,7 +243,7 @@ def ortholog_cmd(
     subject_species: str,
     out: str | None,
     best: int,
-    with_seq: bool,
+    with_subject_seq: bool,
     num_threads: int,
     with_description: bool,
     expr: str,
@@ -253,7 +253,7 @@ def ortholog_cmd(
     """Create an ortholog DataFrame between two species"""
     config = BlastConfig(
         best=best,
-        with_seq=with_seq,
+        with_subject_seq=with_subject_seq,
         header=None,
         num_threads=num_threads,
         with_description=with_description,

@@ -124,7 +124,7 @@ def blast_cmd(
     nucl: bool,
     # blast options
     best: int,
-    with_seq: bool,
+    with_subject_seq: bool,
     num_threads: int,
     with_description: bool,
     expr: str,
@@ -157,7 +157,7 @@ def blast_cmd(
 
     config = BlastConfig(
         best=best,
-        with_seq=with_seq,
+        with_subject_seq=with_subject_seq,
         header=myheader,
         num_threads=num_threads,
         with_description=with_description,

@@ -234,8 +234,8 @@ class Blast6:
         for species, blastdb in blastdbs:
             rdf = self.run(queryfasta, blastdb)
 
-            if config.with_seq and "saccver" in rdf.columns:
-                saccver = list(rdf["saccver"])
+            if config.with_subject_seq and "saccver" in rdf.columns:
+                saccver = list(set(rdf["saccver"]))
                 sdf = fetch_seq_df(saccver, blastdb)
                 rdf = pd.merge(rdf, sdf, left_on="saccver", right_on="saccver")
 
@@ -643,7 +643,7 @@ def check_expr(headers: Sequence[str], expr: str) -> None:
 class BlastConfig:
     best: int = 0
     """retain only n `best` sequences according to `expr`"""
-    with_seq: bool = False
+    with_subject_seq: bool = False
     """put subject sequence into resulting dataframe (as subject_seq)"""
     header: Sequence[str] | None = None
     """Blast columns to generate"""
@@ -687,6 +687,7 @@ def blast_options(f):
     )(f)
     f = click.option(
         "--with-seq",
+        "with_subject_seq",
         is_flag=True,
         help="add subject sequence data to output",
     )(f)
