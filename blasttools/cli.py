@@ -77,7 +77,7 @@ def fasta_xref_cmd(fasta1: str, fasta2: str, out: str | None) -> None:
     "--build",
     "builddir",
     type=click.Path(file_okay=False, dir_okay=True),
-    help="build all databases in this directory",
+    help="build all databases in this directory — otherwise in same directory as fasta file(s)",
 )
 @click.option("-n", "--nucl", is_flag=True, help="nucleotide blastn")
 @click.option(

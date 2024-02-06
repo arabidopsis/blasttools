@@ -57,6 +57,8 @@ def fasta_to_df(
     with_description: bool = False,
     without_query_seq: bool = False,
 ) -> pd.DataFrame:
+    """Read a Fasta file into a pandas dataframe"""
+
     def todict1(rec: SeqRecord) -> dict[str, str]:
         return dict(id=rec.id, seq=str(rec.seq).upper())
 

@@ -43,7 +43,7 @@ class BlastXML(Blast6):
         queryfasta: str | Path,
         blastdb: str | Path,
     ) -> Iterator[Blast]:
-        outfmt = "5"
+        outfmt = "5"  # also 16...
         out = self.get_output()
         blast = self.get_blast()
 

@@ -214,6 +214,19 @@ def species_cmd(cfg: Config) -> None:
         click.echo(s)
 
 
+@plants.command(name="releases")
+@click.option("--max", "max_only", help="max version", is_flag=True)
+def releases_cmd(max_only: bool) -> None:
+    """Available species at Ensembl"""
+    from .plants import find_releases
+
+    rl = find_releases()
+    if max_only:
+        rl = rl[-1:]
+    for s in rl:
+        click.echo(s)
+
+
 @plants.command(name="ortholog")
 @click.option(
     "--out",

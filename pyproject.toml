@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "blasttools"
-version = "0.1.9"
+version = "0.1.10"
 description = ""
 authors = ["arabidopsis <ian.castleden@uwa.edu.au>"]
 readme = "README.md"

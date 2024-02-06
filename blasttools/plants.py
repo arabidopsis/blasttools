@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ftplib
 import glob
+import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,8 +24,9 @@ from .blastapi import fetch_seq as fetch_seq_raw
 from .blastapi import remove_files
 from .blastapi import safe_which
 
+PUB = "ensemblgenomes/pub/"
+TOP = PUB + "release-{release}/plants/"
 FASTAS_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/"
-TOP = "ensemblgenomes/pub/release-{release}/plants/"
 PEP_DIR = TOP + "fasta/{plant}/pep"
 FTPURL = "ftp.ebi.ac.uk"
 ENSEMBL = f"ftp://{FTPURL}/" + PEP_DIR + "/{file}"
@@ -39,6 +41,24 @@ def blast_dir(release: int, *, kingdom: str = "plants") -> Path:
 class FileInfo:
     species: str
     fasta: str | None
+
+
+def find_releases() -> list[int]:
+    """Find all release numbers from Ensembl"""
+    from .config import FTP_TIMEOUT
+
+    ret: list[int] = []
+    V = re.compile(r".*release-(\d+)$")
+
+    with ftplib.FTP(FTPURL, timeout=FTP_TIMEOUT) as ftp:
+        ftp.login()
+        for n in ftp.nlst(PUB):
+            m = V.match(n)
+            if not m:
+                continue
+            v = int(m.group(1))
+            ret.append(v)
+    return sorted(ret)
 
 
 def find_fasta_names(plants: Sequence[str], release: int) -> Iterator[FileInfo]:
@@ -148,12 +168,12 @@ def fetch_seq_df(
     )
 
 
-def find_species(release: int) -> list[str]:
+def find_species(release: int, name: bool = False) -> list[str]:
     from .config import FTP_TIMEOUT
 
     df = get_available_species(release, quiet=True)
     if df is not None:
-        return df["#name"].to_list()
+        return df["#name" if name else "species"].to_list()
 
     with ftplib.FTP(FTPURL, timeout=FTP_TIMEOUT) as ftp:
         ftp.login()
@@ -165,12 +185,12 @@ def get_available_species(release: int, *, quiet: bool = False) -> pd.DataFrame 
     bd = blast_dir(release)
     sfile = bd / SPECIES_TSV
     if sfile.exists():
-        return pd.read_csv(sfile, sep="\t")
+        return pd.read_csv(sfile, sep="\t", index_col=False)
     url = f"ftp://{FTPURL}/{TOP.format(release=release)}/{SPECIES_TSV}"
     resp = fetch_file(SPECIES_TSV, url, release, quiet=quiet)
     if resp.returncode or not sfile.exists():
         return None
-    return pd.read_csv(sfile, sep="\t")
+    return pd.read_csv(sfile, sep="\t", index_col=False)
 
 
 def fetch_fastas(plants: Sequence[str], release: int) -> None:
