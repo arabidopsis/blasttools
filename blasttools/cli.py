@@ -4,18 +4,7 @@ from collections.abc import Sequence
 
 import click
 
-from .blastapi import blast_options
-from .blastapi import blastall
-from .blastapi import BlastConfig
-from .blastapi import buildall
-from .blastapi import check_ext
-from .blastapi import fasta_merge
-from .blastapi import fasta_xref
-from .blastapi import list_out
-from .blastapi import read_df
-from .blastapi import save_df
-from .blastapi import test_save
-from .blastapi import toblastdb
+from .options import blast_options
 
 
 @click.group(
@@ -49,6 +38,8 @@ def update() -> None:
 @click.argument("outfasta", type=click.Path(exists=False, dir_okay=False))
 def fasta_merge_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
     """merge 2 fasta files based on sequence identity"""
+    from .blastapi import fasta_merge
+
     fasta_merge(fasta1, fasta2, outfasta)
 
 
@@ -63,6 +54,7 @@ def fasta_merge_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
 def fasta_xref_cmd(fasta1: str, fasta2: str, out: str | None) -> None:
     """match IDs based on sequence identity"""
     import sys
+    from .blastapi import fasta_xref, save_df, test_save
 
     if out is not None:
         test_save(out)
@@ -100,6 +92,8 @@ def build_cmd(
     nucl: bool,
 ) -> None:
     """Build blast databases from fasta files"""
+    from .blastapi import buildall
+
     buildall(fastas, builddir=builddir, merge=merge, blastp=not nucl)
 
 
@@ -135,7 +129,16 @@ def blast_cmd(
     needs_translation: bool,
 ) -> None:
     """Run a blast query over specified databases"""
-    from .blastapi import mkheader, has_pdatabase
+    from .blastapi import (
+        mkheader,
+        has_pdatabase,
+        blastall,
+        save_df,
+        test_save,
+        check_ext,
+        toblastdb,
+        BlastConfig,
+    )
 
     if len(blastdbs) == 0:
         return
@@ -208,6 +211,7 @@ def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
     """Concatenate multiple saved DataFrames"""
     import sys
     import pandas as pd
+    from .blastapi import read_df, save_df, test_save, check_ext
 
     if out is not None:
         check_ext(out)
@@ -254,6 +258,7 @@ def fasta_split_cmd(
 ) -> None:
     """Split a fasta file into batches"""
     from .utils import split_fasta
+    from .blastapi import list_out
 
     ret = split_fasta(fastafile, batch, target_dir=directory, fmt=fmt)
     if ret is None:

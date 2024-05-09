@@ -3,19 +3,20 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any
+from typing import TYPE_CHECKING
 
 import click
-import pandas as pd
 
-from .blastapi import check_ext
-from .blastapi import fasta_to_df
-from .blastapi import read_fasta
-from .blastapi import save_df
-from .blastapi import test_save
 from .cli import blast
 
+if TYPE_CHECKING:
+    import pandas
 
-def exact(query: str, subjects: Sequence[str]) -> pd.DataFrame:
+
+def exact(query: str, subjects: Sequence[str]) -> pandas.DataFrame:
+    import pandas as pd
+    from .blastapi import read_fasta, fasta_to_df
+
     df = fasta_to_df(query, with_description=True)
     dd = defaultdict(list)
     for subject in subjects:
@@ -31,7 +32,7 @@ def exact(query: str, subjects: Sequence[str]) -> pd.DataFrame:
         ret["description"].append(r.description)
         ret["exact"].append(found)
         if found:
-            ret["subject"].append(", ".join(dd[r.id]))
+            ret["subject"].append(", ".join(dd[r.id or ""]))
         else:
             ret["subject"].append("")
 
@@ -48,6 +49,10 @@ def exact(query: str, subjects: Sequence[str]) -> pd.DataFrame:
 @click.argument("fastas", nargs=-1)
 def exact_cmd(query: str, fastas: Sequence[str], out: str | None) -> None:
     "Try and match sequences exactly"
+    from .blastapi import check_ext
+    from .blastapi import save_df
+    from .blastapi import test_save
+
     if out is not None:
         check_ext(out)
         test_save(out)

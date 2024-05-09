@@ -5,20 +5,9 @@ from typing import Sequence
 
 import click
 
-from .blastapi import blast_options
-from .blastapi import BlastConfig
-from .blastapi import check_ext
-from .blastapi import mkheader
-from .blastapi import save_df
-from .blastapi import test_save
 from .cli import blast
 from .config import RELEASE
-from .plants import blastall
-from .plants import build
-from .plants import fetch_fastas
-from .plants import find_fasta_names
-from .plants import find_species
-from .plants import orthologs
+from .options import blast_options
 
 
 @dataclass
@@ -71,6 +60,8 @@ placed in the directory 'ensembleblast-{release}' (which will be created)
 @pass_config
 def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None:
     """Download and build blast databases"""
+    from .plants import build
+
     build(species, release=cfg.release, path=builddir)
 
 
@@ -132,6 +123,12 @@ def blast_cmd(
     """Run blast on query fasta file"""
     from .plants import available_species
     from .columns import VALID
+    from .blastapi import BlastConfig
+    from .blastapi import check_ext
+    from .blastapi import mkheader
+    from .blastapi import save_df
+    from .blastapi import test_save
+    from .plants import blastall
 
     if len(species) == 0 and not all_db:
         return
@@ -177,6 +174,8 @@ def blast_cmd(
 @pass_config
 def fasta_fetch_cmd(cfg: Config, species: Sequence[str]) -> None:
     """Download fasta files from FTP site"""
+    from .plants import fetch_fastas
+
     fetch_fastas(species, release=cfg.release)
 
 
@@ -191,6 +190,7 @@ def fasta_filenames_cmd(
 ) -> None:
     """Find fasta filenames for plant species"""
     from .plants import ENSEMBL
+    from .plants import find_fasta_names
 
     for info in find_fasta_names(species, release=cfg.release):
         if info.fasta is None:
@@ -211,6 +211,8 @@ def fasta_filenames_cmd(
 @pass_config
 def species_cmd(cfg: Config) -> None:
     """Available species at Ensembl"""
+    from .plants import find_species
+
     sl = find_species(cfg.release)
     for s in sorted(sl):
         click.echo(s)
@@ -254,6 +256,9 @@ def ortholog_cmd(
     needs_translation: bool,
 ) -> None:
     """Create an ortholog DataFrame between two species"""
+    from .blastapi import BlastConfig, check_ext, test_save, save_df
+    from .plants import orthologs
+
     config = BlastConfig(
         best=best,
         with_subject_seq=with_subject_seq,

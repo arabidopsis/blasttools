@@ -15,9 +15,9 @@ from uuid import uuid4
 
 import click
 import pandas as pd
-from Bio import SeqIO  # type: ignore
-from Bio.Seq import Seq  # type: ignore
-from Bio.SeqRecord import SeqRecord  # type: ignore
+from Bio import SeqIO
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 from pandas.errors import UndefinedVariableError
 
 
@@ -61,10 +61,14 @@ def fasta_to_df(
     """Read a Fasta file into a pandas dataframe"""
 
     def todict1(rec: SeqRecord) -> dict[str, str]:
-        return dict(id=rec.id, seq=str(rec.seq).upper())
+        return dict(id=rec.id or "", seq=str(rec.seq).upper())
 
     def todict2(rec: SeqRecord) -> dict[str, str]:
-        return dict(id=rec.id, seq=str(rec.seq).upper(), description=rec.description)
+        return dict(
+            id=rec.id or "",
+            seq=str(rec.seq).upper(),
+            description=rec.description,
+        )
 
     todict = todict2 if with_description else todict1
     qdf = pd.DataFrame([todict(rec) for rec in read_fasta(path)])
@@ -643,50 +647,6 @@ class BlastConfig:
     """Use blast xml output to obtain match, query, sbjct sequences"""
     needs_translation: bool = False
     """query fasta contains mixed rna/dna/rna sequences too"""
-
-
-def blast_options(f):
-    f = click.option(
-        "--needs-translation",
-        is_flag=True,
-        help="query fasta contains rna/dna/cdna sequences too",
-    )(f)
-    f = click.option(
-        "--without-query-seq",
-        is_flag=True,
-        help="don't output query sequence",
-    )(f)
-    f = click.option("--xml", is_flag=True, help="run with xml output (for matches)")(f)
-    f = click.option(
-        "-t",
-        "--num-threads",
-        help="number of threads to use for blast",
-        default=1,
-    )(f)
-    f = click.option(
-        "--expr",
-        help="expression to minimize when looking for --best. e.g. ",
-        default=EVALUE,
-        show_default=True,
-    )(f)
-    f = click.option(
-        "-d",
-        "--with-description",
-        is_flag=True,
-        help="include query description in output",
-    )(f)
-    f = click.option(
-        "--with-seq",
-        "with_subject_seq",
-        is_flag=True,
-        help="add subject sequence data to output",
-    )(f)
-    f = click.option(
-        "--best",
-        default=0,
-        help="best (lowest) evalues [=0 take all]  (see also --expr)",
-    )(f)
-    return f
 
 
 def blastall(

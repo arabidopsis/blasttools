@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Iterator
 from typing import TypeVar
 
+from Bio.SeqRecord import SeqRecord
+
 from .blastapi import read_fasta
 from .blastapi import write_fasta_iter
 
@@ -52,3 +54,11 @@ def split_fasta(
 
 def is_rna(s: str) -> bool:
     return set(s).issubset({"A", "C", "G", "U", "T"})
+
+
+def translate(fasta: str | Path) -> Iterator[SeqRecord]:
+    for rec in read_fasta(fasta):
+        if is_rna(str(rec.seq)):
+            rec.seq = rec.seq.transcribe().translate()
+            # print('translated', rec.id,rec.seq, file=sys.stderr)
+        yield rec
