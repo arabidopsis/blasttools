@@ -19,7 +19,10 @@ from .blastapi import toblastdb
 
 
 @click.group(
-    epilog=click.style("Commands to run blasts\n", fg="magenta"),
+    epilog=click.style(
+        "Commands for turning blast queries into pandas dataframes.\n",
+        fg="magenta",
+    ),
 )
 @click.version_option()
 def blast() -> None:
@@ -129,6 +132,7 @@ def blast_cmd(
     with_description: bool,
     expr: str,
     without_query_seq: bool,
+    needs_translation: bool,
 ) -> None:
     """Run a blast query over specified databases"""
     from .blastapi import mkheader, has_pdatabase
@@ -165,6 +169,7 @@ def blast_cmd(
         blastp=not nucl,
         without_query_seq=without_query_seq,
         xml=xml,
+        needs_translation=needs_translation,
     )
 
     df = blastall(query, blastdbs, config=config)

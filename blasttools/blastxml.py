@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from collections.abc import Sequence
 from dataclasses import asdict
 from dataclasses import dataclass
@@ -42,15 +43,20 @@ class BlastXML(Blast6):
         self,
         queryfasta: str | Path,
         blastdb: str | Path,
+        *,
+        needs_translation: bool = False,
     ) -> Iterator[Blast]:
         outfmt = "5"  # also 16...
         out = self.get_output()
         blast = self.get_blast()
 
         queryfasta = Path(queryfasta)
-        cat_cmd = get_cat(queryfasta)
-        cat_cmd.append(queryfasta.name)
 
+        if not needs_translation:
+            cat_cmd = get_cat(queryfasta)
+            cat_cmd.append(queryfasta.name)
+        else:
+            cat_cmd = [sys.executable, "-m", "blasttools.translate", queryfasta.name]
         try:
             with subprocess.Popen(
                 cat_cmd,
@@ -70,6 +76,7 @@ class BlastXML(Blast6):
                         out,
                         "-num_threads",
                         str(self.num_threads),
+                        *self.get_blast_args(),
                     ],
                     stdin=p1.stdout,
                 ) as p2:
@@ -89,10 +96,25 @@ class BlastXML(Blast6):
     def todict(self, hit: Hit) -> dict[str, Any]:
         return {k: v for k, v in asdict(hit).items() if k in self._h}
 
-    def run(self, queryfasta: str | Path, blastdb: str | Path) -> pd.DataFrame:
+    def run(
+        self,
+        queryfasta: str | Path,
+        blastdb: str | Path,
+        *,
+        needs_translation: bool = False,
+    ) -> pd.DataFrame:
         todict = self.todict
         return pd.DataFrame(
-            [todict(hit) for hit in hits(self.runner(queryfasta, blastdb))],
+            [
+                todict(hit)
+                for hit in hits(
+                    self.runner(
+                        queryfasta,
+                        blastdb,
+                        needs_translation=needs_translation,
+                    ),
+                )
+            ],
         )
 
 

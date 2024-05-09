@@ -1,12 +1,18 @@
 [tool.poetry]
 name = "blasttools"
-version = "0.1.10"
-description = ""
-authors = ["arabidopsis <ian.castleden@uwa.edu.au>"]
+version = "0.1.11"
+description = "Commands for turning blast queries into pandas dataframes."
+authors = ["Ian Castleden <ian.castleden@uwa.edu.au>"]
 readme = "README.md"
-
+license = "MIT"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 [tool.poetry.dependencies]
-python = "^3.11,<3.13"
+python = ">=3.9,<3.13"
 pandas = "^2.1.1"
 click = "^8.1.7"
 biopython = "^1.81"

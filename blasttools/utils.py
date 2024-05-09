@@ -48,3 +48,7 @@ def split_fasta(
         write_fasta_iter(sname, it)
 
     return ret
+
+
+def is_rna(s: str) -> bool:
+    return set(s).issubset({"A", "C", "G", "U", "T"})

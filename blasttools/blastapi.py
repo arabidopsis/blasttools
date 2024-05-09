@@ -3,6 +3,7 @@ from __future__ import annotations
 import gzip
 import os
 import subprocess
+import sys
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -190,38 +191,6 @@ class Blast6:
     def get_blast(self) -> str:
         return safe_which("blastp") if self.blastp else safe_which("blastn")
 
-    def run_old(
-        self,
-        queryfasta: str | Path,
-        blastdb: str | Path,
-    ) -> pd.DataFrame:
-        blast = self.get_blast()
-        outfmt = f'6 {" ".join(self.header)}'
-        out = f"{uuid4()}.tsv"
-        try:
-            r = subprocess.run(
-                [
-                    blast,
-                    "-outfmt",
-                    outfmt,
-                    "-query",
-                    str(queryfasta),
-                    "-db",
-                    str(blastdb),
-                    "-out",
-                    out,
-                    "-num_threads",
-                    str(self.num_threads),
-                ],
-                check=False,
-            )
-            if r.returncode:
-                b = "blastp" if self.blastp else "blastn"
-                raise click.ClickException(f"Can't run {b} using {queryfasta}")
-            return out6_to_df(out, self.header)
-        finally:
-            remove_files([out])
-
     def blastall(
         self,
         qdf: pd.DataFrame,
@@ -232,7 +201,11 @@ class Blast6:
     ) -> pd.DataFrame:
         res = []
         for species, blastdb in blastdbs:
-            rdf = self.run(queryfasta, blastdb)
+            rdf = self.run(
+                queryfasta,
+                blastdb,
+                needs_translation=config.needs_translation,
+            )
 
             if config.with_subject_seq and "saccver" in rdf.columns:
                 saccver = list(set(rdf["saccver"]))
@@ -246,6 +219,11 @@ class Blast6:
 
         return ddf
 
+    def get_blast_args(self) -> list[str]:
+        if "BLAST_ARGS" not in os.environ:
+            return []
+        return os.environ["BLAST_ARGS"].split()
+
     def get_output(self) -> str:
         return f"{uuid4()}.tsv"
 
@@ -253,14 +231,18 @@ class Blast6:
         self,
         queryfasta: str | Path,
         blastdb: str | Path,
+        *,
+        needs_translation: bool = False,
     ) -> pd.DataFrame:
         blast = self.get_blast()
         outfmt = f'6 {" ".join(self.header)}'
         out = self.get_output()
         queryfasta = Path(queryfasta)
-        cat_cmd = get_cat(queryfasta)
-        cat_cmd.append(queryfasta.name)
-
+        if not needs_translation:
+            cat_cmd = get_cat(queryfasta)
+            cat_cmd.append(queryfasta.name)
+        else:
+            cat_cmd = [sys.executable, "-m", "blasttools.translate", queryfasta.name]
         try:
             with subprocess.Popen(
                 cat_cmd,
@@ -280,6 +262,7 @@ class Blast6:
                         out,
                         "-num_threads",
                         str(self.num_threads),
+                        *self.get_blast_args(),
                     ],
                     stdin=p1.stdout,
                 ) as p2:
@@ -658,9 +641,16 @@ class BlastConfig:
     """don't retain query sequence column (as seq)"""
     xml: bool = False
     """Use blast xml output to obtain match, query, sbjct sequences"""
+    needs_translation: bool = False
+    """query fasta contains mixed rna/dna/rna sequences too"""
 
 
 def blast_options(f):
+    f = click.option(
+        "--needs-translation",
+        is_flag=True,
+        help="query fasta contains rna/dna/cdna sequences too",
+    )(f)
     f = click.option(
         "--without-query-seq",
         is_flag=True,

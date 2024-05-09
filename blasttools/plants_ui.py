@@ -127,6 +127,7 @@ def blast_cmd(
     expr: str,
     without_query_seq: bool,
     xml: bool,
+    needs_translation: bool,
 ) -> None:
     """Run blast on query fasta file"""
     from .plants import available_species
@@ -160,6 +161,7 @@ def blast_cmd(
         expr=expr,
         without_query_seq=without_query_seq,
         xml=xml,
+        needs_translation=needs_translation,
     )
     df = blastall(query, species, release=cfg.release, path=builddir, config=config)
     if out is None:
@@ -249,6 +251,7 @@ def ortholog_cmd(
     expr: str,
     without_query_seq: bool,
     xml: bool,
+    needs_translation: bool,
 ) -> None:
     """Create an ortholog DataFrame between two species"""
     config = BlastConfig(
@@ -260,6 +263,7 @@ def ortholog_cmd(
         expr=expr,
         without_query_seq=without_query_seq,
         xml=xml,
+        needs_translation=needs_translation,
     )
     if out is not None:
         check_ext(out)

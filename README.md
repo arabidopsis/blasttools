@@ -1,11 +1,11 @@
 # blasttools
 
-Command for turning blast queries into pandas dataframes.
+Commands for turning blast queries into pandas dataframes.
 
 Blast against any built blast databases
 
 ```sh
-blasttools blast --out=my.pkl my.fasta my_blastdbs_dir/*.pot
+blasttools blast --out=my.pkl query.fasta my_blastdbs_dir/*.pot
 ```
 
 ## Install
@@ -13,6 +13,8 @@ blasttools blast --out=my.pkl my.fasta my_blastdbs_dir/*.pot
 Install with
 
 ```sh
+python -m pip install -U blasttools
+# *OR*
 python -m pip install -U 'git+https://github.com/arabidopsis/blasttools.git'
 ```
 
