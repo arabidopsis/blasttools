@@ -32,8 +32,7 @@ def exact(query: str, subjects: Sequence[str]) -> pandas.DataFrame:
         ret["description"].append(r.description)
         ret["exact"].append(found)
         if found:
-            ret["subject"].append(", ".join(dd[r.id or ""]))
-        else:
+            ret["subject"].append(", ".join(str(s) for s in dd[r.id]))
             ret["subject"].append("")
 
     return pd.DataFrame(ret)
