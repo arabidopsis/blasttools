@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from typing import Iterator
+from typing import Literal
 from typing import Sequence
 
 import click
@@ -28,13 +29,17 @@ PUB = "ensemblgenomes/pub/"
 TOP = PUB + "release-{release}/plants/"
 FASTAS_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/"
 PEP_DIR = TOP + "fasta/{plant}/pep"
+CDNA_DIR = TOP + "fasta/{plant}/cdna"
 FTPURL = "ftp.ebi.ac.uk"
-ENSEMBL = f"ftp://{FTPURL}/" + PEP_DIR + "/{file}"
+ENSEMBL = f"ftp://{FTPURL}/" + TOP + "fasta/{plant}/{seqtype}/{file}"
 SPECIES_TSV = "species_EnsemblPlants.txt"
 
 
 def blast_dir(release: int, *, kingdom: str = "plants") -> Path:
     return Path(f"ensembl{kingdom}-{release}")
+
+
+SeqType = Literal["pep", "cdna"]
 
 
 @dataclass
@@ -61,15 +66,24 @@ def find_releases() -> list[int]:
     return sorted(ret)
 
 
-def find_fasta_names(plants: Sequence[str], release: int) -> Iterator[FileInfo]:
+def find_fasta_names(
+    plants: Sequence[str],
+    release: int,
+    *,
+    seqtype: SeqType = "pep",
+) -> Iterator[FileInfo]:
     from .config import FTP_TIMEOUT
 
+    tail = f".{seqtype}.all.fa.gz"
+    dirname = PEP_DIR if seqtype == "pep" else CDNA_DIR
     with ftplib.FTP(FTPURL, timeout=FTP_TIMEOUT) as ftp:
         ftp.login()
         for plant in plants:
-            dname = PEP_DIR.format(release=release, plant=plant)
+            dname = dirname.format(release=release, plant=plant)
+            print("looking in", dname, tail)
             for n in ftp.nlst(dname):
-                if n.endswith(".pep.all.fa.gz"):
+                print(n)
+                if n.endswith(tail):
                     yield FileInfo(plant, n[len(dname) + 1 :])
                     break
             else:
@@ -104,8 +118,9 @@ def fetch_fasta(
     release: int,
     *,
     quiet: bool = False,
+    seqtype: SeqType = "pep",
 ) -> subprocess.CompletedProcess[bytes]:
-    url = ENSEMBL.format(release=release, plant=plant, file=filename)
+    url = ENSEMBL.format(release=release, plant=plant, file=filename, seqtype=seqtype)
     return fetch_file(filename, url, release, quiet=quiet)
 
 
@@ -193,12 +208,17 @@ def get_available_species(release: int, *, quiet: bool = False) -> pd.DataFrame 
     return pd.read_csv(sfile, sep="\t", index_col=False)
 
 
-def fetch_fastas(plants: Sequence[str], release: int) -> None:
+def fetch_fastas(
+    plants: Sequence[str],
+    release: int,
+    *,
+    seqtype: SeqType = "pep",
+) -> Path:
     bd = blast_dir(release)
 
     bd.mkdir(parents=True, exist_ok=True)
 
-    for info in find_fasta_names(plants, release):
+    for info in find_fasta_names(plants, release, seqtype=seqtype):
         if info.fasta is None:
             click.echo(f"Can't find fasta for {info.species}!", err=True)
             continue
@@ -206,9 +226,10 @@ def fetch_fastas(plants: Sequence[str], release: int) -> None:
         if (bd / info.fasta).exists():
             continue
         click.echo(f"fetching {info.fasta}")
-        r = fetch_fasta(info.species, info.fasta, release=release)
+        r = fetch_fasta(info.species, info.fasta, release=release, seqtype=seqtype)
         if r.returncode:
             click.secho(f"failed to fetch {info.fasta}: {r}", fg="red", err=True)
+    return bd
 
 
 def build(species: Sequence[str], release: int, *, path: str | None = None) -> bool:

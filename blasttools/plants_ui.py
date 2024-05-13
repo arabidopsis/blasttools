@@ -170,13 +170,27 @@ def blast_cmd(
 
 
 @plants.command(name="fasta-fetch")
+@click.option(
+    "--cdna",
+    is_flag=True,
+    help="download the cdna (instead of peptide) version",
+)
 @click.argument("species", nargs=-1)
 @pass_config
-def fasta_fetch_cmd(cfg: Config, species: Sequence[str]) -> None:
+def fasta_fetch_cmd(cfg: Config, species: Sequence[str], cdna: bool) -> None:
     """Download fasta files from FTP site"""
     from .plants import fetch_fastas
 
-    fetch_fastas(species, release=cfg.release)
+    if not species:
+        return
+    download_dir = fetch_fastas(
+        species,
+        release=cfg.release,
+        seqtype="cdna" if cdna else "pep",
+    )
+    dd = click.style(str(download_dir), fg="blue")
+    s = "s" if len(species) > 1 else ""
+    click.echo(f"downloaded file{s} into: {dd}/")
 
 
 @plants.command("fasta-filenames")

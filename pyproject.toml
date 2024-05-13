@@ -1,12 +1,12 @@
 [tool.poetry]
 name = "blasttools"
-version = "0.1.13"
+version = "0.1.14"
 description = "Commands for turning blast queries into pandas dataframes."
 authors = ["Ian Castleden <ian.castleden@uwa.edu.au>"]
 readme = "README.md"
 license = "MIT"
-repository="https://github.com/arabidopsis/blasttools"
-keywords=["mass spectrometry","bioinformatics"]
+repository = "https://github.com/arabidopsis/blasttools"
+keywords = ["genomics", "bioinformatics"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
