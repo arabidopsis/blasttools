@@ -196,11 +196,18 @@ def find_species(release: int, name: bool = False) -> list[str]:
         return list(ftp.nlst())
 
 
-def get_available_species(release: int, *, quiet: bool = False) -> pd.DataFrame | None:
+def get_available_species(
+    release: int,
+    *,
+    quiet: bool = False,
+    fail_early: bool = False,
+) -> pd.DataFrame | None:
     bd = blast_dir(release)
     sfile = bd / SPECIES_TSV
     if sfile.exists():
         return pd.read_csv(sfile, sep="\t", index_col=False)
+    if fail_early:
+        return None
     url = f"ftp://{FTPURL}/{TOP.format(release=release)}/{SPECIES_TSV}"
     resp = fetch_file(SPECIES_TSV, url, release, quiet=quiet)
     if resp.returncode or not sfile.exists():
@@ -208,16 +215,24 @@ def get_available_species(release: int, *, quiet: bool = False) -> pd.DataFrame 
     return pd.read_csv(sfile, sep="\t", index_col=False)
 
 
+def show_missing(plants: Sequence[str], release: int) -> list[str]:
+    df = get_available_species(release, quiet=True, fail_early=False)
+    if df is None:
+        return []
+    missing = [m for m in plants if m not in df["species"].to_list()]
+    return missing
+
+
 def fetch_fastas(
     plants: Sequence[str],
     release: int,
     *,
     seqtype: SeqType = "pep",
-) -> Path:
+) -> tuple[Path, int]:
     bd = blast_dir(release)
 
     bd.mkdir(parents=True, exist_ok=True)
-
+    failed = 0
     for info in find_fasta_names(plants, release, seqtype=seqtype):
         if info.fasta is None:
             click.echo(f"Can't find fasta for {info.species}!", err=True)
@@ -228,8 +243,9 @@ def fetch_fastas(
         click.echo(f"fetching {info.fasta}")
         r = fetch_fasta(info.species, info.fasta, release=release, seqtype=seqtype)
         if r.returncode:
+            failed += 1
             click.secho(f"failed to fetch {info.fasta}: {r}", fg="red", err=True)
-    return bd
+    return bd, failed
 
 
 def build(species: Sequence[str], release: int, *, path: str | None = None) -> bool:

@@ -179,18 +179,25 @@ def blast_cmd(
 @pass_config
 def fasta_fetch_cmd(cfg: Config, species: Sequence[str], cdna: bool) -> None:
     """Download fasta files from FTP site"""
-    from .plants import fetch_fastas
+    from .plants import fetch_fastas, show_missing
 
     if not species:
         return
-    download_dir = fetch_fastas(
+
+    missing = show_missing(species, cfg.release)
+    if missing:
+        click.secho(f"unknown species: {', '.join(missing)}", fg="red", err=True)
+        raise click.Abort()
+
+    download_dir, failed = fetch_fastas(
         species,
         release=cfg.release,
         seqtype="cdna" if cdna else "pep",
     )
-    dd = click.style(str(download_dir), fg="blue")
-    s = "s" if len(species) > 1 else ""
-    click.echo(f"downloaded file{s} into: {dd}/")
+    if failed == 0:
+        dd = click.style(str(download_dir), fg="blue")
+        s = "s" if len(species) > 1 else ""
+        click.echo(f"downloaded file{s} into: {dd}/")
 
 
 @plants.command("fasta-filenames")
