@@ -28,8 +28,8 @@ from .blastapi import safe_which
 PUB = "ensemblgenomes/pub/"
 TOP = PUB + "release-{release}/plants/"
 FASTAS_DIR = "ensemblgenomes/pub/release-{release}/plants/fasta/"
-PEP_DIR = TOP + "fasta/{plant}/pep"
-CDNA_DIR = TOP + "fasta/{plant}/cdna"
+TARGET_DIR = TOP + "fasta/{plant}/{seqtype}"
+
 FTPURL = "ftp.ebi.ac.uk"
 ENSEMBL = f"ftp://{FTPURL}/" + TOP + "fasta/{plant}/{seqtype}/{file}"
 SPECIES_TSV = "species_EnsemblPlants.txt"
@@ -39,7 +39,7 @@ def blast_dir(release: int, *, kingdom: str = "plants") -> Path:
     return Path(f"ensembl{kingdom}-{release}")
 
 
-SeqType = Literal["pep", "cdna"]
+SeqType = Literal["pep", "cdna", "cds"]
 
 
 @dataclass
@@ -75,12 +75,10 @@ def find_fasta_names(
     from .config import FTP_TIMEOUT
 
     tail = f".{seqtype}.all.fa.gz"
-    dirname = PEP_DIR if seqtype == "pep" else CDNA_DIR
     with ftplib.FTP(FTPURL, timeout=FTP_TIMEOUT) as ftp:
         ftp.login()
         for plant in plants:
-            dname = dirname.format(release=release, plant=plant)
-            print("looking in", dname, tail)
+            dname = TARGET_DIR.format(release=release, plant=plant, seqtype=seqtype)
             for n in ftp.nlst(dname):
                 print(n)
                 if n.endswith(tail):
