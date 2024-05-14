@@ -80,7 +80,6 @@ def find_fasta_names(
         for plant in plants:
             dname = TARGET_DIR.format(release=release, plant=plant, seqtype=seqtype)
             for n in ftp.nlst(dname):
-                print(n)
                 if n.endswith(tail):
                     yield FileInfo(plant, n[len(dname) + 1 :])
                     break
