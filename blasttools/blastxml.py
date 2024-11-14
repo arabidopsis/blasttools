@@ -14,9 +14,9 @@ from uuid import uuid4
 
 import click
 import pandas as pd
-from Bio.Align import Alignment
-from Bio.Blast import HSP
+from Bio.Blast.NCBIXML import Alignment
 from Bio.Blast.NCBIXML import Blast
+from Bio.Blast.NCBIXML import HSP
 from Bio.Blast.NCBIXML import parse
 
 from .blastapi import Blast6
@@ -197,7 +197,7 @@ def hits(xml: Iterator[Blast], full: bool = False) -> Iterator[Hit]:
         yield Hit(
             qaccver=queryid,
             qlen=b.query_length,
-            saccver=a.accession,
+            saccver=a.hit_id,
             slen=a.length,
             length=h.align_length,  # alignment length
             bitscore=h.bits,
