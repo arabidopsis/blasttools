@@ -274,3 +274,50 @@ def fasta_split_cmd(
     # parallel blasttools blast --out=my{}.pkl ::: $fastas ::: blastdb
     # blasttools concat --out=final.csv my*.pkl && rm my*.pkl
     list_out((p.resolve() for p in ret), use_null=use_null)
+
+
+@blast.command()
+@click.option("-d", "--desc", help="optional description column")
+@click.option(
+    "--out",
+    help="output filename",
+    type=click.Path(dir_okay=False),
+)
+@click.argument("csvfile", type=click.Path(exists=True, dir_okay=False))
+@click.argument("idcol")
+@click.argument("seqcol")
+def from_csv(
+    csvfile: str,
+    idcol: str,
+    seqcol: str,
+    desc: str | None,
+    out: str | None,
+) -> None:
+    """convert CSV file to fasta. idcol specifies id, seqcol specifies seq column"""
+    import pandas as pd
+    from Bio import SeqIO
+    from Bio.SeqRecord import SeqRecord, Seq
+
+    df = pd.read_csv(csvfile, dtype={idcol: str, seqcol: str})
+
+    cols = [idcol, seqcol]
+    if desc:
+        cols.append(desc)
+    df = df[cols]
+    assert ~df[idcol].str.match(r"\s+").any(), "ids contain spaces"
+    assert df[idcol].is_unique, "non unique ids"
+    two = len(cols) == 2
+    if two:
+        df.columns = ["id", "seq"]  # type: ignore
+    else:
+        df.columns = ["id", "seq", "description"]  # type: ignore
+    if out is None:
+        out = f"{csvfile}.fasta"
+    click.secho(f"writing: {out}", fg="green")
+    with open(out, "w", encoding="ascii") as fp:
+        for t in df.itertuples():
+            if two:
+                rec = SeqRecord(Seq(t.seq), t.id)
+            else:
+                rec = SeqRecord(Seq(t.seq), t.id, description=t.description)
+            SeqIO.write(rec, fp, "fasta")
