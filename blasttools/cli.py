@@ -201,13 +201,14 @@ def columns_cmd() -> None:
 
 
 @blast.command(name="concat")
+@click.option("-c", "--columns", help="comma separated list of columns to select")
 @click.option(
     "--out",
     help="output filename. If not specified, write CSV to stdout",
     type=click.Path(dir_okay=False),
 )
 @click.argument("dataframes", nargs=-1, type=click.Path(dir_okay=False, exists=True))
-def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
+def concat_cmd(dataframes: Sequence[str], out: str | None, columns: str | None) -> None:
     """Concatenate multiple saved DataFrames"""
     import sys
     import pandas as pd
@@ -216,13 +217,18 @@ def concat_cmd(dataframes: Sequence[str], out: str | None) -> None:
     if out is not None:
         check_ext(out)
         test_save(out)
-
+    if columns is not None:
+        cols = columns.split(",")
+    else:
+        cols = []
     dfs = []
     for df in dataframes:
         res = read_df(df)
         if res is None:
             click.secho(f"Can't read {df}", err=True, bold=True, fg="red")
             continue
+        if cols:
+            res = res[cols]
         dfs.append(res)
 
     odf = pd.concat(dfs, axis=0, ignore_index=True)
