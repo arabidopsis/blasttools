@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "blasttools"
-version = "0.1.16"
+version = "0.1.17"
 description = "Commands for turning blast queries into pandas dataframes."
 authors = ["Ian Castleden <ian.castleden@uwa.edu.au>"]
 readme = "README.md"

@@ -14,10 +14,10 @@ from uuid import uuid4
 
 import click
 import pandas as pd
-from Bio.Blast.NCBIXML import parse  # type: ignore
-from Bio.Blast.Record import Alignment  # type: ignore
-from Bio.Blast.Record import Blast
-from Bio.Blast.Record import HSP
+from Bio.Align import Alignment
+from Bio.Blast import HSP
+from Bio.Blast.NCBIXML import Blast
+from Bio.Blast.NCBIXML import parse
 
 from .blastapi import Blast6
 from .blastapi import get_cat

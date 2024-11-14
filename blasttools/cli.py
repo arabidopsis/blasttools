@@ -256,7 +256,7 @@ def fasta_split_cmd(
     directory: str | None,
     use_null: bool,
 ) -> None:
-    """Split a fasta file into batches"""
+    """Split a fasta file into batches of BATCH sequences"""
     from .utils import split_fasta
     from .blastapi import list_out
 
