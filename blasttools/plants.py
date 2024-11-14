@@ -245,11 +245,31 @@ def fetch_fastas(
     return bd, failed
 
 
-def build(species: Sequence[str], release: int, *, path: str | None = None) -> bool:
+def build(
+    species: Sequence[str],
+    release: int,
+    *,
+    path: str | None = None,
+    connect: bool = True,
+) -> bool:
     blastdir = blast_dir(release)
     if path is not None:
         blastdir = Path(path) / blastdir
     blastdir.mkdir(parents=True, exist_ok=True)
+    if not connect:
+        missing = []
+        for spec in species:
+            if not has_blast_db(blastdir, spec):
+                missing.append(spec)
+                click.secho(
+                    f"Missing blast database for {spec}",
+                    fg="red",
+                    bold=True,
+                    err=True,
+                )
+        if missing:
+            return False
+        return True
 
     plants = list(find_fasta_names(species, release=release))
     ret = True
@@ -326,7 +346,7 @@ def blastall(
         without_query_seq=config.without_query_seq,
     )
 
-    ok = build(species, release, path=path)
+    ok = build(species, release, path=path, connect=config.connect)
     if not ok:
         raise click.ClickException("Can't build blast databases(s)")
 

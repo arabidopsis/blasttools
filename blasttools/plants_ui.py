@@ -91,6 +91,11 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     help="try all available databases",
 )
 @click.option(
+    "--no-connect",
+    is_flag=True,
+    help="don't connect to ensembl to build any databases ... just fail",
+)
+@click.option(
     "-b",
     "--build",
     "builddir",
@@ -119,6 +124,7 @@ def blast_cmd(
     without_query_seq: bool,
     xml: bool,
     needs_translation: bool,
+    no_connect: bool,
 ) -> None:
     """Run blast on query fasta file"""
     from .plants import available_species
@@ -159,6 +165,7 @@ def blast_cmd(
         without_query_seq=without_query_seq,
         xml=xml,
         needs_translation=needs_translation,
+        connect=not no_connect,
     )
     df = blastall(query, species, release=cfg.release, path=builddir, config=config)
     if out is None:
