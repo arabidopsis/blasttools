@@ -286,7 +286,7 @@ def fasta_split_cmd(
 @click.argument("csvfile", type=click.Path(exists=True, dir_okay=False))
 @click.argument("idcol")
 @click.argument("seqcol")
-def from_csv(
+def fasta_from_csv(
     csvfile: str,
     idcol: str,
     seqcol: str,
