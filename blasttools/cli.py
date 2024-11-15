@@ -336,3 +336,25 @@ def fasta_from_csv(
             else:
                 rec = SeqRecord(Seq(t.seq), t.id, description=t.description)
             SeqIO.write(rec, fp, "fasta")
+
+
+@blast.command()
+@click.option("-x", "--without-description", help="without description data")
+@click.option(
+    "--out",
+    help="output filename",
+    type=click.Path(dir_okay=False),
+)
+@click.argument("fasta", type=click.Path(exists=True, dir_okay=False))
+def fasta_to_df(
+    fasta: str,
+    without_description: bool,
+    out: str | None,
+) -> None:
+    """convert a fasta file to a dataframe"""
+    from .blastapi import fasta_to_df as f2df, save_df
+
+    df = f2df(fasta, with_description=not without_description)
+    if out is None:
+        out = f"{fasta}.pkl"
+    save_df(df, out, index=False)
