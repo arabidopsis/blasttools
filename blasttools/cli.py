@@ -201,7 +201,11 @@ def columns_cmd() -> None:
 
 
 @blast.command(name="concat")
-@click.option("-c", "--columns", help="comma separated list of columns to select")
+@click.option(
+    "-c",
+    "--columns",
+    help="comma separated list of columns to select prefix with '-' to remove columns",
+)
 @click.option(
     "--out",
     help="output filename. If not specified, write CSV to stdout",
@@ -217,7 +221,11 @@ def concat_cmd(dataframes: Sequence[str], out: str | None, columns: str | None) 
     if out is not None:
         check_ext(out)
         test_save(out)
+    remove = False
     if columns is not None:
+        if columns.startswith("-"):
+            columns = columns[1:]
+            remove = True
         cols = columns.split(",")
     else:
         cols = []
@@ -228,7 +236,11 @@ def concat_cmd(dataframes: Sequence[str], out: str | None, columns: str | None) 
             click.secho(f"Can't read {df}", err=True, bold=True, fg="red")
             continue
         if cols:
-            res = res[cols]
+            if remove:
+                cc = [c for c in res.columns if c not in cols]
+                res = res[cc]
+            else:
+                res = res[cols]
         dfs.append(res)
 
     odf = pd.concat(dfs, axis=0, ignore_index=True)
