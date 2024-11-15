@@ -264,7 +264,10 @@ def concat_cmd(dataframes: Sequence[str], out: str | None, columns: str | None) 
     is_flag=True,
     help="separate filenames by '\\0' in output",
 )
-@click.option("--fmt", help="format of split filenames. Must have a {num} key.")
+@click.option(
+    "--fmt",
+    help='format of split filenames. Must have a {num} key (e.g. "out-{num:03d}.fasta.gz" ).',
+)
 @click.argument("fastafile", type=click.Path(dir_okay=False, exists=True))
 @click.argument("batch", type=int)
 def fasta_split_cmd(
