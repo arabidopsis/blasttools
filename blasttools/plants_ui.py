@@ -253,7 +253,7 @@ def species_cmd(cfg: Config) -> None:
 @plants.command(name="releases")
 @click.option("--max", "max_only", help="max version", is_flag=True)
 def releases_cmd(max_only: bool) -> None:
-    """Available species at Ensembl"""
+    """Available releases at Ensembl"""
     from .plants import find_releases
 
     rl = find_releases()
