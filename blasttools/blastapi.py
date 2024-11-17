@@ -647,7 +647,7 @@ class BlastConfig:
     """Use blast xml output to obtain match, query, sbjct sequences"""
     needs_translation: bool = False
     """query fasta contains mixed rna/dna/rna sequences too"""
-    connect: bool = True
+    no_build: bool = False
     """connect to ensembl if information required. Basically will accept already build blast databases as current"""
 
 

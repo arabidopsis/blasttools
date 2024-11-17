@@ -250,13 +250,13 @@ def build(
     release: int,
     *,
     path: str | None = None,
-    connect: bool = True,
+    no_build: bool = False,
 ) -> bool:
     blastdir = blast_dir(release)
     if path is not None:
         blastdir = Path(path) / blastdir
     blastdir.mkdir(parents=True, exist_ok=True)
-    if not connect:
+    if no_build:
         missing = []
         for spec in species:
             if not has_blast_db(blastdir, spec):
@@ -346,7 +346,7 @@ def blastall(
         without_query_seq=config.without_query_seq,
     )
 
-    ok = build(species, release, path=path, connect=config.connect)
+    ok = build(species, release, path=path, no_build=config.no_build)
     if not ok:
         raise click.ClickException("Can't build blast databases(s)")
 
