@@ -702,6 +702,7 @@ def buildall(
     merge: str | None = None,
     *,
     blastp: bool = True,
+    lower: bool = True,
 ) -> None:
     if builddir is not None:
         builddir = Path(builddir)
@@ -717,7 +718,8 @@ def buildall(
             fa = Path(fastafile)
             name = fa.name
             name, _ = name.split(".", maxsplit=1)
-            name = name.lower()
+            if lower:
+                name = name.lower()
             db = builddir / name if builddir else fa.parent / name
             b = BlastDb(db, blastp=blastp)
             ok = b.run(fa)

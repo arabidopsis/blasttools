@@ -94,7 +94,7 @@ def build_cmd(
     """Build blast databases from fasta files"""
     from .blastapi import buildall
 
-    buildall(fastas, builddir=builddir, merge=merge, blastp=not nucl)
+    buildall(fastas, builddir=builddir, merge=merge, blastp=not nucl, lower=False)
 
 
 @blast.command(name="blast")
