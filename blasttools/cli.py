@@ -18,6 +18,13 @@ def blast() -> None:
     pass
 
 
+@blast.group(
+    help=click.style("fasta transformations", fg="magenta"),
+)
+def fasta():
+    pass
+
+
 @blast.command()
 def update() -> None:
     """Update this package"""
@@ -32,7 +39,7 @@ def update() -> None:
         raise click.Abort()
 
 
-@blast.command(name="fasta-merge")
+@fasta.command(name="merge")
 @click.argument("fasta1", type=click.Path(exists=True, dir_okay=False))
 @click.argument("fasta2", type=click.Path(exists=True, dir_okay=False))
 @click.argument("outfasta", type=click.Path(exists=False, dir_okay=False))
@@ -43,7 +50,7 @@ def fasta_merge_cmd(fasta1: str, fasta2: str, outfasta: str) -> None:
     fasta_merge(fasta1, fasta2, outfasta)
 
 
-@blast.command(name="fasta-xref")
+@fasta.command(name="xref")
 @click.option(
     "--out",
     help="output filename (default is to write CSV to stdout)",
@@ -250,7 +257,7 @@ def concat_cmd(dataframes: Sequence[str], out: str | None, columns: str | None) 
         odf.to_csv(sys.stdout, index=False)
 
 
-@blast.command(name="fasta-split")
+@fasta.command(name="split")
 @click.option(
     "-d",
     "--directory",
@@ -291,7 +298,7 @@ def fasta_split_cmd(
     list_out((p.resolve() for p in ret), use_null=use_null)
 
 
-@blast.command()
+@fasta.command(name="from-csv")
 @click.option("-d", "--desc", help="optional description column")
 @click.option(
     "--out",
@@ -319,7 +326,7 @@ def fasta_from_csv(
     if desc:
         cols.append(desc)
     df = df[cols]
-    assert ~df[idcol].str.match(r"\s+").any(), "ids contain spaces"
+    assert not df[idcol].str.match(r"\s+").any(), "ids contain spaces"
     assert df[idcol].is_unique, "non unique ids"
     two = len(cols) == 2
     if two:
@@ -338,11 +345,16 @@ def fasta_from_csv(
             SeqIO.write(rec, fp, "fasta")
 
 
-@blast.command()
-@click.option("-x", "--without-description", help="without description data")
+@fasta.command(name="to-df")
+@click.option(
+    "-x",
+    "--without-description",
+    is_flag=True,
+    help="without description data",
+)
 @click.option(
     "--out",
-    help="output filename",
+    help="output filename [{input filename}.pkl]",
     type=click.Path(dir_okay=False),
 )
 @click.argument("fasta", type=click.Path(exists=True, dir_okay=False))
