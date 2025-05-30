@@ -149,6 +149,8 @@ def findall(
     n = len(gene_names)
     V11 = convert["v11"].str.upper()
     for idx, (desc, ids) in enumerate(gene_names):
+        if sleep and idx != 0:
+            time.sleep(sleep)
         idss = set(ids)
         click.secho(f"{desc}[{len(idss)}]: {idx + 1}/{n}", fg="yellow", nl=False)
         res = archive_ids(idss)
@@ -172,8 +174,6 @@ def findall(
         if idss:
             for iid in idss:
                 yield (desc, iid, "missing", "missing", "")
-        if sleep and idx != n - 1:
-            time.sleep(sleep)
 
 
 def run(idfilename: str, *, sleep: float = 0.0, lc: bool = False) -> pd.DataFrame:
@@ -183,7 +183,7 @@ def run(idfilename: str, *, sleep: float = 0.0, lc: bool = False) -> pd.DataFram
         "description",
         "transcript_id",
         "stable_id_v1",
-        "stabled_id_v2",
+        "stable_id_v2",
         "confidence",
     ]
     df = pd.DataFrame(
