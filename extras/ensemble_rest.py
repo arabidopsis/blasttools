@@ -4,8 +4,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from typing import cast
 from typing import Iterable
+from typing import Iterator
 from typing import Literal
+from typing import NamedTuple
 from typing import overload
 
 import click
@@ -73,6 +76,13 @@ def archive_ids(ids: Iterable[str], verbose: bool = False):
     return ret
 
 
+class CRow(NamedTuple):
+    v11: str
+    v11_confidence: str
+    v21: str
+    v21_confidence: str
+
+
 def get_21_conversions() -> pd.DataFrame:
     iwgsc = pd.read_csv(
         "https://urgi.versailles.inrae.fr/download/iwgsc/IWGSC_RefSeq_Annotations/v2.1/iwgsc_refseq_all_correspondances.zip",
@@ -129,17 +139,21 @@ def findall(
     *,
     sleep: float = 0.0,
     lc: bool = False,
-):
+) -> Iterator[tuple[str, ...]]:
     n = len(gene_names)
+    V11 = convert["v11"].str.upper()
     for idx, (desc, ids) in enumerate(gene_names):
         idss = set(ids)
         click.secho(f"{desc}[{len(idss)}]: {idx + 1}/{n}", fg="yellow", nl=False)
         res = archive_ids(idss)
         click.secho(" done", fg="green")
         for r in res:
-            idss.remove(r.id)
+            if r.id in idss:
+                idss.remove(r.id)
+            elif r.latest in idss:
+                idss.remove(r.latest)
             for p in r.possible_replacement:
-                q = p.stable_id == convert["v11"]
+                q = p.stable_id.upper() == V11
                 if not lc:
                     q = q & (convert["v21_confidence"] == "HC")
                 v2ids = convert[q][["v21", "v21_confidence"]]
@@ -147,7 +161,8 @@ def findall(
                     yield (desc, r.id, p.stable_id, "missing", "")
                 else:
                     for t in v2ids.itertuples():
-                        yield (desc, r.id, p.stable_id, t.v21, t.v21_confidence)
+                        y = cast(CRow, t)
+                        yield (desc, r.id, p.stable_id, y.v21, y.v21_confidence)
         if idss:
             for iid in idss:
                 yield (desc, iid, "missing", "missing", "")
@@ -173,7 +188,44 @@ def run(idfilename: str, *, sleep: float = 0.0, lc: bool = False) -> pd.DataFram
     return df
 
 
-@click.command()
+def convert(idfilename: str, lc: bool = False) -> pd.DataFrame:
+    gene_names = read_genes(idfilename)
+    convert = get_21_conversions()
+    columns = ["description", "stable_id_v1", "stable_id_v2", "confidence"]
+    return pd.DataFrame(
+        list(run_conversion(gene_names, convert, lc=lc)),
+        columns=columns,
+    )
+
+
+def run_conversion(
+    gene_names: list[tuple[str, list[str]]],
+    convert: pd.DataFrame,
+    lc: bool = False,
+) -> Iterator[tuple[str, ...]]:
+    hc = convert["v21_confidence"] == "HC"
+    V11 = convert["v11"].str.upper()
+    for desc, ids in gene_names:
+        for iid in ids:
+            gene, ext = iid.split(".")
+            q = gene.upper() == V11
+            if not lc:
+                q = q & hc
+            v2ids = convert[q][["v21", "v21_confidence"]]
+            if len(v2ids) == 0:
+                yield (desc, iid, "missing", "")
+            else:
+                for t in v2ids.itertuples():
+                    y = cast(CRow, t)
+                    yield (desc, iid, y.v21 + "." + ext, y.v21_confidence)
+
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command(name="transcripts")
 @click.option(
     "--sleep",
     default=1.0,
@@ -181,21 +233,43 @@ def run(idfilename: str, *, sleep: float = 0.0, lc: bool = False) -> pd.DataFram
     show_default=True,
 )
 @click.option(
-    "--lc",
+    "--low-confidence",
     is_flag=True,
-    help="include low  genes",
+    help="include low confidence genes",
     show_default=True,
 )
 @click.argument(
     "idfilename",
     type=click.Path(exists=True, dir_okay=False, file_okay=True),
 )
-def run_cmd(idfilename: str, sleep: float, lc: bool) -> None:
+def run_cmd(idfilename: str, sleep: float, low_confidence: bool) -> None:
     "find some ids"
-    pd = run(idfilename, sleep=sleep, lc=lc)
+    pd = run(idfilename, sleep=sleep, lc=low_confidence)
+    if not low_confidence:
+        pd = pd.drop(columns=["confidence"])
+    pth = Path(idfilename)
+    pd.to_csv(pth.parent / (pth.stem + ".csv"), index=False)
+
+
+@cli.command("conv1v2")
+@click.option(
+    "--low-confidence",
+    is_flag=True,
+    help="include low confidence genes",
+    show_default=True,
+)
+@click.argument(
+    "idfilename",
+    type=click.Path(exists=True, dir_okay=False, file_okay=True),
+)
+def cvt_cmd(idfilename: str, low_confidence: bool) -> None:
+    "convert v1.1 IDs to v2.1"
+    pd = convert(idfilename, lc=low_confidence)
+    if not low_confidence:
+        pd = pd.drop(columns=["confidence"])
     pth = Path(idfilename)
     pd.to_csv(pth.parent / (pth.stem + ".csv"), index=False)
 
 
 if __name__ == "__main__":
-    run_cmd()
+    cli()
