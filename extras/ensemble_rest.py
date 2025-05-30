@@ -149,7 +149,7 @@ def findall(
                     for t in v2ids.itertuples():
                         yield (desc, r.id, p.stable_id, t.v21, t.v21_confidence)
         if idss:
-            for iid in ids:
+            for iid in idss:
                 yield (desc, iid, "missing", "missing", "")
         if sleep and idx != n - 1:
             time.sleep(sleep)
