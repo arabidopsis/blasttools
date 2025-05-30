@@ -18,6 +18,8 @@ ignore =
     W503
     # line break after binary operator
     W504
+    # multiple statements on one line # for @overload
+    E704
 exclude =
     .git
     __pycache__

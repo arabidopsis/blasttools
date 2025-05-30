@@ -251,7 +251,7 @@ def hsp_match(hsp: Hit, width: int = 50, right: int = 0) -> str:
             lines.append(
                 f"Query:{str(query_start).rjust(8)} {query}{s} {query_end - 1}",
             )
-            lines.append(f"{' '*15}{hsp.match[q:q+width]}")
+            lines.append(f"{' ' * 15}{hsp.match[q:q + width]}")
             lines.append(
                 f"Sbjct:{str(sbjct_start).rjust(8)} {sbjct}{s} {sbjct_end - 1}",
             )
