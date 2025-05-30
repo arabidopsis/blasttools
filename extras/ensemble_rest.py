@@ -76,6 +76,7 @@ def archive_ids(ids: Iterable[str], verbose: bool = False):
     return ret
 
 
+# fake type for row itertuples()
 class CRow(NamedTuple):
     v11: str
     v11_confidence: str
@@ -112,9 +113,14 @@ def get_21_conversions() -> pd.DataFrame:
     return convert
 
 
-def read_genes(filename: str) -> list[tuple[str, list[str]]]:
+class GeneFamily(NamedTuple):
+    description: str
+    transcripts: list[str]
+
+
+def read_genes(filename: str) -> list[GeneFamily]:
     current: list[str] = []
-    idata: list[tuple[str, list[str]]] = []
+    idata: list[GeneFamily] = []
     desc = None
     with open(filename, encoding="utf8") as fp:
         for r in fp:
@@ -122,19 +128,19 @@ def read_genes(filename: str) -> list[tuple[str, list[str]]]:
             if not r:
                 continue
             if r.startswith(">"):
-                if desc:
-                    idata.append((desc, current))
+                if desc and current:
+                    idata.append(GeneFamily(desc, current))
                 current = []
                 desc = r[1:]
             else:
                 current.append(r)
     if desc and current:
-        idata.append((desc, current))
+        idata.append(GeneFamily(desc, current))
     return idata
 
 
 def findall(
-    gene_names: list[tuple[str, list[str]]],
+    gene_names: list[GeneFamily],
     convert: pd.DataFrame,
     *,
     sleep: float = 0.0,
@@ -199,7 +205,7 @@ def convert(idfilename: str, lc: bool = False) -> pd.DataFrame:
 
 
 def run_conversion(
-    gene_names: list[tuple[str, list[str]]],
+    gene_names: list[GeneFamily],
     convert: pd.DataFrame,
     lc: bool = False,
 ) -> Iterator[tuple[str, ...]]:
