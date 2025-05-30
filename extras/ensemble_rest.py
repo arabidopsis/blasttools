@@ -207,7 +207,11 @@ def run_conversion(
     V11 = convert["v11"].str.upper()
     for desc, ids in gene_names:
         for iid in ids:
-            gene, ext = iid.split(".")
+            if "." in iid:
+                gene, ext = iid.split(".")
+                ext = "." + ext
+            else:
+                gene, ext = iid, ""
             q = gene.upper() == V11
             if not lc:
                 q = q & hc
@@ -217,7 +221,7 @@ def run_conversion(
             else:
                 for t in v2ids.itertuples():
                     y = cast(CRow, t)
-                    yield (desc, iid, y.v21 + "." + ext, y.v21_confidence)
+                    yield (desc, iid, y.v21 + ext, y.v21_confidence)
 
 
 @click.group()
