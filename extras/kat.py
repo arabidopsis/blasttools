@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 import pandas as pd
 from Bio import SeqIO
-from Bio.SeqRecord import Seq
+from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 
@@ -16,7 +16,7 @@ def kat():
 
 @kat.command()
 @click.argument("csvfile", type=click.Path(exists=True, dir_okay=False))
-def convert(csvfile):
+def convert(csvfile: str):
     """convert CSV file to fasta"""
     df = pd.read_csv(csvfile)
     assert df.columns == ["Gene.stable.ID", "Protein_stable_ID", "AA_combined_f"]
@@ -27,7 +27,7 @@ def convert(csvfile):
     click.secho(f"writing: {out}", fg="green")
     with open(out, "w", encoding="ascii") as fp:
         for t in df.itertuples():
-            rec = SeqRecord(Seq(t.seq), t.id, description=t.gene)
+            rec = SeqRecord(Seq(t.seq), t.id, description=t.gene)  # type: ignore
             SeqIO.write(rec, fp, "fasta")
 
 
@@ -44,4 +44,5 @@ def tocsv(pklfile: str, toxlsx: bool):
     df.to_csv(out)
 
 
-kat()
+if __name__ == "__main__":
+    kat()
