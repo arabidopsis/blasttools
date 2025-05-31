@@ -90,8 +90,6 @@ def get_21_conversions() -> pd.DataFrame:
         sep=" ",
     )
 
-    # iwgsc = pd.read_csv('iwgsc_refseq_all_correspondances.csv', sep=' ')
-
     # 02 and 6 numbers
     TRAES02 = r"^(TraesCS(?:[1234567][ABD]|U)02[G][0-9]{6})(LC)?$"
     v11a = iwgsc["v1.1"].str.extract(TRAES02, expand=True)
@@ -119,21 +117,28 @@ class GeneFamily(NamedTuple):
 
 
 def read_genes(filename: str) -> list[GeneFamily]:
+    """FASTA like file
+
+    With `>description`
+    followed by space|newline separated transcript ids
+    """
     current: list[str] = []
     idata: list[GeneFamily] = []
     desc = None
     with open(filename, encoding="utf8") as fp:
-        for r in fp:
-            r = r.strip()
-            if not r:
+        for line in fp:
+            line = line.strip()
+            if not line:
                 continue
-            if r.startswith(">"):
+            if line.startswith(">"):
                 if desc and current:
                     idata.append(GeneFamily(desc, current))
                 current = []
-                desc = r[1:]
+                desc = line[1:]
             else:
-                current.append(r)
+                for i in line.split():
+                    if i:
+                        current.append(i)
     if desc and current:
         idata.append(GeneFamily(desc, current))
     return idata
@@ -144,10 +149,11 @@ def findall(
     convert: pd.DataFrame,
     *,
     sleep: float = 0.0,
-    lc: bool = False,
+    low_confidence: bool = False,
 ) -> Iterator[tuple[str, ...]]:
     n = len(gene_names)
     V11 = convert["v11"].str.upper()
+    HC = convert["v21_confidence"] == "HC"
     for idx, (desc, ids) in enumerate(gene_names):
         if sleep and idx != 0:
             time.sleep(sleep)
@@ -162,8 +168,8 @@ def findall(
                 idss.remove(r.latest)
             for p in r.possible_replacement:
                 q = p.stable_id.upper() == V11
-                if not lc:
-                    q = q & (convert["v21_confidence"] == "HC")
+                if not low_confidence:
+                    q = q & HC
                 v2ids = convert[q][["v21", "v21_confidence"]]
                 if len(v2ids) == 0:
                     yield (desc, r.id, p.stable_id, "missing", "")
@@ -176,7 +182,12 @@ def findall(
                 yield (desc, iid, "missing", "missing", "")
 
 
-def run(idfilename: str, *, sleep: float = 0.0, lc: bool = False) -> pd.DataFrame:
+def get_v21_ids(
+    idfilename: str,
+    *,
+    sleep: float = 0.0,
+    low_confidence: bool = False,
+) -> pd.DataFrame:
     gene_names = read_genes(idfilename)
     convert = get_21_conversions()
     columns = [
@@ -187,19 +198,19 @@ def run(idfilename: str, *, sleep: float = 0.0, lc: bool = False) -> pd.DataFram
         "confidence",
     ]
     df = pd.DataFrame(
-        list(findall(gene_names, convert, sleep=sleep, lc=lc)),
+        list(findall(gene_names, convert, sleep=sleep, low_confidence=low_confidence)),
         columns=columns,
     )
 
     return df
 
 
-def convert(idfilename: str, lc: bool = False) -> pd.DataFrame:
+def convert(idfilename: str, low_confidence: bool = False) -> pd.DataFrame:
     gene_names = read_genes(idfilename)
     convert = get_21_conversions()
     columns = ["description", "stable_id_v1", "stable_id_v2", "confidence"]
     return pd.DataFrame(
-        list(run_conversion(gene_names, convert, lc=lc)),
+        list(run_conversion(gene_names, convert, low_confidence=low_confidence)),
         columns=columns,
     )
 
@@ -207,7 +218,7 @@ def convert(idfilename: str, lc: bool = False) -> pd.DataFrame:
 def run_conversion(
     gene_names: list[GeneFamily],
     convert: pd.DataFrame,
-    lc: bool = False,
+    low_confidence: bool = False,
 ) -> Iterator[tuple[str, ...]]:
     hc = convert["v21_confidence"] == "HC"
     V11 = convert["v11"].str.upper()
@@ -219,7 +230,7 @@ def run_conversion(
             else:
                 gene, ext = iid, ""
             q = gene.upper() == V11
-            if not lc:
+            if not low_confidence:
                 q = q & hc
             v2ids = convert[q][["v21", "v21_confidence"]]
             if len(v2ids) == 0:
@@ -243,25 +254,11 @@ def cli():
     show_default=True,
 )
 @click.option(
-    "--low-confidence",
-    is_flag=True,
-    help="include low confidence genes",
-    show_default=True,
+    "-o",
+    "--out",
+    help="output CSV file",
+    type=click.Path(dir_okay=False, file_okay=True),
 )
-@click.argument(
-    "idfilename",
-    type=click.Path(exists=True, dir_okay=False, file_okay=True),
-)
-def run_cmd(idfilename: str, sleep: float, low_confidence: bool) -> None:
-    "find some ids"
-    pd = run(idfilename, sleep=sleep, lc=low_confidence)
-    if not low_confidence:
-        pd = pd.drop(columns=["confidence"])
-    pth = Path(idfilename)
-    pd.to_csv(pth.parent / (pth.stem + ".csv"), index=False)
-
-
-@cli.command("conv1v2")
 @click.option(
     "--low-confidence",
     is_flag=True,
@@ -272,13 +269,50 @@ def run_cmd(idfilename: str, sleep: float, low_confidence: bool) -> None:
     "idfilename",
     type=click.Path(exists=True, dir_okay=False, file_okay=True),
 )
-def cvt_cmd(idfilename: str, low_confidence: bool) -> None:
-    "convert v1.1 IDs to v2.1"
-    pd = convert(idfilename, lc=low_confidence)
+def run_cmd(
+    idfilename: str,
+    sleep: float,
+    low_confidence: bool,
+    out: str | Path | None,
+) -> None:
+    "find some ids"
+    pd = get_v21_ids(idfilename, sleep=sleep, low_confidence=low_confidence)
     if not low_confidence:
         pd = pd.drop(columns=["confidence"])
-    pth = Path(idfilename)
-    pd.to_csv(pth.parent / (pth.stem + ".csv"), index=False)
+    if not out:
+        pth = Path(idfilename)
+        out = pth.parent / (pth.stem + ".csv")
+    click.secho(f'writing: "{out}"', fg="green")
+    pd.to_csv(out, index=False)
+
+
+@cli.command("conv1v2")
+@click.option(
+    "-o",
+    "--out",
+    help="output CSV file",
+    type=click.Path(dir_okay=False, file_okay=True),
+)
+@click.option(
+    "--low-confidence",
+    is_flag=True,
+    help="include low confidence genes",
+    show_default=True,
+)
+@click.argument(
+    "idfilename",
+    type=click.Path(exists=True, dir_okay=False, file_okay=True),
+)
+def cvt_cmd(idfilename: str, low_confidence: bool, out: str | Path | None) -> None:
+    "convert v1.1 IDs to v2.1"
+    pd = convert(idfilename, low_confidence=low_confidence)
+    if not low_confidence:
+        pd = pd.drop(columns=["confidence"])
+    if not out:
+        pth = Path(idfilename)
+        out = pth.parent / (pth.stem + ".csv")
+    click.secho(f'writing: "{out}"', fg="green")
+    pd.to_csv(out, index=False)
 
 
 if __name__ == "__main__":
