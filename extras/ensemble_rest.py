@@ -77,7 +77,7 @@ def archive_ids(ids: Iterable[str], verbose: bool = False):
 
 
 # fake type for row itertuples()
-class CRow(NamedTuple):
+class IWGSCRow(NamedTuple):
     v11: str
     v11_confidence: str
     v21: str
@@ -96,7 +96,7 @@ def get_21_conversions() -> pd.DataFrame:
     v11a.columns = ["v11", "v11_confidence"]
     v11a.loc[v11a.v11_confidence.isna(), "v11_confidence"] = "HC"
 
-    assert not v11a.isna().any().any()
+    assert not v11a.isna().any().any(), f"v1.1 IDs don't match Pattern {TRAES02}"
 
     # 03 and 7 numbers
     TRAES03 = r"^(TraesCS(?:[1234567][ABD]|U)03[G][0-9]{7})(LC)?$"
@@ -104,7 +104,7 @@ def get_21_conversions() -> pd.DataFrame:
     v21a.columns = ["v21", "v21_confidence"]
     v21a.loc[v21a.v21_confidence.isna(), "v21_confidence"] = "HC"
 
-    assert not v21a.isna().any().any()
+    assert not v21a.isna().any().any(), f"v2.1 IDs don't match Pattern {TRAES03}"
 
     convert = pd.concat([v11a, v21a], axis=1)
     convert = convert.drop_duplicates(ignore_index=True)
@@ -172,14 +172,14 @@ def findall(
                     q = q & HC
                 v2ids = convert[q][["v21", "v21_confidence"]]
                 if len(v2ids) == 0:
-                    yield (desc, r.id, p.stable_id, "missing", "")
+                    yield (desc, r.id, p.stable_id, "no_match", "")
                 else:
                     for t in v2ids.itertuples():
-                        y = cast(CRow, t)
+                        y = cast(IWGSCRow, t)
                         yield (desc, r.id, p.stable_id, y.v21, y.v21_confidence)
         if idss:
             for iid in idss:
-                yield (desc, iid, "missing", "missing", "")
+                yield (desc, iid, "no_match", "no_match", "")
 
 
 def get_v21_ids(
@@ -237,7 +237,7 @@ def run_conversion(
                 yield (desc, iid, "missing", "")
             else:
                 for t in v2ids.itertuples():
-                    y = cast(CRow, t)
+                    y = cast(IWGSCRow, t)
                     yield (desc, iid, y.v21 + ext, y.v21_confidence)
 
 
