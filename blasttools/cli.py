@@ -26,16 +26,24 @@ def fasta():
 
 
 @blast.command()
-def update() -> None:
+@click.option("--pypi", is_flag=True, help="use PyPI.org instead of github")
+def update(pypi: bool) -> None:
     """Update this package"""
     import subprocess
     import sys
+    from shutil import which
 
     from .config import REPO
 
-    ret = subprocess.call([sys.executable, "-m", "pip", "install", "-U", REPO])
+    repo = "blasttools" if pypi else REPO
+
+    uv = which("uv")
+    if uv is not None:
+        ret = subprocess.call([uv, "pip", "install", "-U", repo])
+    else:
+        ret = subprocess.call([sys.executable, "-m", "pip", "install", "-U", repo])
     if ret:
-        click.secho(f"Can't install {REPO}", fg="red", err=True)
+        click.secho(f"Can't install {repo}", fg="red", err=True)
         raise click.Abort()
 
 
@@ -318,7 +326,8 @@ def fasta_from_csv(
     """convert CSV file to fasta. idcol specifies id, seqcol specifies seq column"""
     import pandas as pd
     from Bio import SeqIO
-    from Bio.SeqRecord import SeqRecord, Seq
+    from Bio.SeqRecord import SeqRecord
+    from Bio.Seq import Seq
 
     df = pd.read_csv(csvfile, dtype={idcol: str, seqcol: str})
 
@@ -339,9 +348,9 @@ def fasta_from_csv(
     with open(out, "w", encoding="ascii") as fp:
         for t in df.itertuples():
             if two:
-                rec = SeqRecord(Seq(t.seq), t.id)
+                rec = SeqRecord(Seq(t.seq), t.id)  # type: ignore
             else:
-                rec = SeqRecord(Seq(t.seq), t.id, description=t.description)
+                rec = SeqRecord(Seq(t.seq), t.id, description=t.description)  # type: ignore
             SeqIO.write(rec, fp, "fasta")
 
 
