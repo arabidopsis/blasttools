@@ -146,7 +146,7 @@ def blast_cmd(
     """Run a blast query over specified databases"""
     from .blastapi import (
         mkheader,
-        has_pdatabase,
+        has_database,
         blastall,
         save_df,
         test_save,
@@ -163,7 +163,7 @@ def blast_cmd(
         test_save(out)
 
     blastdbs = toblastdb(blastdbs)
-    missing = {b for b in blastdbs if not has_pdatabase(b)}
+    missing = {b for b in blastdbs if not has_database(b, nucl)}
     if missing:
         m = ", ".join(missing)
         raise click.BadParameter(f"missing databases {m}", param_hint="blastdbs")
@@ -301,7 +301,7 @@ def fasta_split_cmd(
         raise click.ClickException(f"Can't split fasta file {fastafile}")
     # So you can do say:
     # fastas=$(blasttools fasta-split fastafile.fa.gz 20000)
-    # parallel blasttools blast --out=my{}.pkl ::: $fastas ::: blastdb
+    # parallel blasttools blast --out=my{#}.pkl {1} {2} ::: $fastas ::: blastdb
     # blasttools concat --out=final.csv my*.pkl && rm my*.pkl
     list_out((p.resolve() for p in ret), use_null=use_null)
 

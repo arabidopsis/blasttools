@@ -39,9 +39,12 @@ def read_fasta(path: str | Path) -> Iterator[SeqRecord]:
             yield from SeqIO.parse(fp, "fasta")
 
 
-def has_pdatabase(path: str) -> bool:
-    if "." not in path:
-        path += ".pdb"
+def has_database(path: str, nucl: bool = False) -> bool:
+    if not path.endswith((".ndb", ".pdb")):
+        if nucl:
+            path += ".ndb"
+        else:
+            path += ".pdb"
     return Path(path).exists()
 
 
@@ -175,7 +178,7 @@ def mkheader(header: str) -> Sequence[str]:
         hl = _hl
     unknown = set(hl) - set(VALID)
     if unknown:
-        raise click.ClickException(f"unknown headers \"{' '.join(unknown)}\"")
+        raise click.ClickException(f'unknown headers "{" ".join(unknown)}"')
     return tuple(hl)
 
 
@@ -239,7 +242,7 @@ class Blast6:
         needs_translation: bool = False,
     ) -> pd.DataFrame:
         blast = self.get_blast()
-        outfmt = f'6 {" ".join(self.header)}'
+        outfmt = f"6 {' '.join(self.header)}"
         out = self.get_output()
         queryfasta = Path(queryfasta)
         if not needs_translation:
@@ -522,7 +525,7 @@ def try_save(
     elif ext in {"pkl", "pickle"}:
         df.to_pickle(filename)
     elif ext in {"hdf", "h5", "hd5"}:
-        df.to_hdf(filename, key)
+        df.to_hdf(filename, key=key)
     else:
         return False
     return True
@@ -707,6 +710,7 @@ def buildall(
     if builddir is not None:
         builddir = Path(builddir)
         if not builddir.exists():
+            click.secho(f'creating directory: "{builddir}"', fg="yellow", err=True)
             builddir.mkdir(exist_ok=True, parents=True)
     out = None
     if merge:
@@ -717,9 +721,11 @@ def buildall(
         for fastafile in fastafiles:
             fa = Path(fastafile)
             name = fa.name
-            name, _ = name.split(".", maxsplit=1)
+            name, _ = name.rsplit(".", maxsplit=1)
             if lower:
                 name = name.lower()
+            if name.endswith((".fasta", ".fa")):
+                name, _ = name.rsplit(".", maxsplit=1)
             db = builddir / name if builddir else fa.parent / name
             b = BlastDb(db, blastp=blastp)
             ok = b.run(fa)

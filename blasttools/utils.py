@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterator
 from typing import TypeVar
 
+import click
 from Bio.SeqRecord import SeqRecord
 
 from .blastapi import read_fasta
@@ -36,12 +37,13 @@ def split_fasta(
     fastafile = Path(fastafile)
     fname, _ = splitext(fastafile.name)
 
-    fname = f"{fname}-{{num}}.fa.gz" if fmt is None else fmt
+    fname = f"{fname}-{{num:03d}}.fa.gz" if fmt is None else fmt
 
     ret = []
     if target_dir is None:
         target_dir = fastafile.parent
     else:
+        click.secho(f'creating directory: "{target_dir}"', fg="yellow", err=True)
         target_dir = Path(target_dir)
         target_dir.mkdir(parents=True, exist_ok=True)
     for num, it in enumerate(batched(read_fasta(fastafile), batch), start=1):
@@ -58,7 +60,7 @@ def is_rna(s: str) -> bool:
 
 def translate(fasta: str | Path) -> Iterator[SeqRecord]:
     for rec in read_fasta(fasta):
-        if is_rna(str(rec.seq)):
+        if rec.seq is not None and is_rna(str(rec.seq)):
             rec.seq = rec.seq.transcribe().translate()
             # print('translated', rec.id,rec.seq, file=sys.stderr)
         yield rec
