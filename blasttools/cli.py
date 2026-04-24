@@ -83,8 +83,8 @@ def fasta_xref_cmd(fasta1: str, fasta2: str, out: str | None) -> None:
 
 @blast.command(name="build")
 @click.option(
-    "-b",
-    "--build",
+    "-d",
+    "--directory",
     "builddir",
     type=click.Path(file_okay=False, dir_okay=True),
     help="build all databases in this directory — otherwise in same directory as fasta file(s)",

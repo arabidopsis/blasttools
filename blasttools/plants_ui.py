@@ -50,8 +50,8 @@ placed in the directory 'ensembleblast-{release}' (which will be created)
 
 @plants.command(name="build", epilog=click.style(BUILD, fg="magenta"))
 @click.option(
-    "-b",
-    "--build",
+    "-d",
+    "--directory",
     "builddir",
     type=click.Path(file_okay=False, dir_okay=True),
     help="build all 'ensembleblast-{release}' directories in this directory",
@@ -96,8 +96,8 @@ def build_cmd(cfg: Config, species: Sequence[str], builddir: str | None) -> None
     help="don't connect to ensembl to build any databases ... just fail",
 )
 @click.option(
-    "-b",
-    "--build",
+    "-d",
+    "--directory",
     "builddir",
     type=click.Path(file_okay=False, dir_okay=True),
     help="find all 'ensembleblast-{release}' directories in this directory",
