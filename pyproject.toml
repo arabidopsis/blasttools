@@ -1,6 +1,6 @@
 [project]
 name = "blasttools"
-version = "0.2.0"
+version = "0.2.1"
 description = "Commands for turning blast queries into pandas dataframes."
 authors = [{ name = "Ian Castleden", email = "ian.castleden@uwa.edu.au" }]
 requires-python = ">=3.9"

@@ -54,6 +54,17 @@ def split_fasta(
     return ret
 
 
+def fasta_filter(fastafile: str | Path, ids: set[str]) -> Iterator[SeqRecord]:
+    for rec in read_fasta(fastafile):
+        if rec.id in ids:
+            ids.remove(rec.id)
+            yield rec
+
+
+def fasta_filter_out(fastafile: str | Path, outfile: str | Path, ids: set[str]) -> None:
+    write_fasta_iter(Path(outfile), fasta_filter(fastafile, ids))
+
+
 def is_rna(s: str) -> bool:
     return set(s).issubset({"A", "C", "G", "U", "T"})
 

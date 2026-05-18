@@ -379,3 +379,23 @@ def fasta_to_df(
     if out is None:
         out = f"{fasta}.pkl"
     save_df(df, out, index=False)
+
+
+@fasta.command(name="filter")
+@click.argument("infasta", type=click.Path(exists=False, dir_okay=False))
+@click.argument("outfasta", type=click.Path(exists=False, dir_okay=False))
+@click.argument("csvfile", type=click.Path(exists=True, dir_okay=False))
+def fasta_filter_cmd(infasta: str, outfasta: str, csvfile: str) -> None:
+    """filter a fasta file to only include ids in a csv file (first column no header)"""
+    from .utils import fasta_filter_out
+    import pandas as pd
+
+    df = pd.read_csv(csvfile, dtype=str, header=None)
+    ids = set(df[0])
+    fasta_filter_out(infasta, outfasta, ids)
+    if ids:
+        click.secho(
+            f"Warning: {len(ids)} ids from {csvfile} not found in {infasta}",
+            fg="yellow",
+            err=True,
+        )
